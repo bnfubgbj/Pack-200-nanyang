@@ -121,6 +121,25 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#1d2433;color:#fff;padding:10px 16px;border-radius:10px;z-index:60;font-size:14px;max-width:92vw;white-space:pre-line;display:none}
 .sync{font-size:12px;color:#c9d5e6}
 @media(max-width:720px){.kpis{grid-template-columns:repeat(2,1fr)}.logo span.t2{display:none}.jtot .big{font-size:17px}}
+.grp{display:flex;justify-content:space-between;align-items:baseline;margin:14px 2px 2px;font-weight:700;color:var(--navy);font-size:14.5px}
+.grp .gs{font-weight:500;color:var(--mute);font-size:12.5px}
+.grp:first-child{margin-top:0}
+.list{gap:6px!important}
+.jh{padding:9px 12px!important;align-items:center!important;gap:10px!important}
+.chev{color:#9aa1ad;font-size:13px;width:12px}
+.jt .nm{font-size:15.5px}
+.jsub{margin-top:1px!important;font-size:12.5px!important;gap:4px 10px!important;align-items:center}
+.jsub .sack{font-size:12px;padding:0 6px}
+.csum{display:flex;flex-wrap:wrap;gap:2px 10px;margin-top:3px;font-size:12px;color:#555}
+.csum .dot{width:9px;height:9px;margin-right:3px}
+.csum b{color:var(--ink)}
+.jtot .big{font-size:18px!important}.jtot small{font-size:12px;font-weight:500}
+.qwrap{flex-shrink:0}
+.qb{font:inherit;font-weight:600;font-size:13px;border:0;border-radius:9px;padding:8px 12px;cursor:pointer;white-space:nowrap}
+.q-pack{background:var(--green);color:#fff}.q-urg{background:#fff;color:var(--amber);border:1.5px solid var(--amber)}.q-load{background:var(--navy2);color:#fff}
+.job.open{box-shadow:0 2px 10px #0001}
+.hasnote{cursor:help}
+@media(max-width:720px){.jh{flex-wrap:wrap}.qwrap{width:100%}.qb{width:100%;padding:10px}.chev{display:none}}
 @media print{header,.filters,.acts,.kpis,.demo,.tabs{display:none!important}.job{break-inside:avoid;border:1px solid #999}body{background:#fff}}
 </style>
 </head>
@@ -157,6 +176,7 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
       <button class="chip" data-s="all" onclick="setStatus('all')">ทั้งหมด</button>
       <select id="fSrc" onchange="render()"><option value="">ทุกแหล่ง</option><option value="EXCEL">เอเยนต์ (Excel)</option><option value="PDF">ส่งตรง (PDF)</option></select>
       <select id="fTrip" onchange="render()"><option value="">ทุกเที่ยว</option></select>
+      <button class="chip" id="btnAll" onclick="toggleAll()">กางทั้งหมด</button>
       <input id="fQ" placeholder="🔍 ค้นหา ลูกค้า / SO / IFO / ชื่อกระสอบ" oninput="render()">
     </div>
     <div class="list" id="list"></div>
@@ -404,44 +424,57 @@ function render(){
   const rank = j => j.status==='pending'?(j.priority>0?0:1):(j.status==='packed'?2:3);
   L.sort((a,b)=> rank(a)-rank(b) || (rank(a)===0? a.priority-b.priority:0) || String(a.trip||99).localeCompare(String(b.trip||99),undefined,{numeric:true}) || String(a.createdAt).localeCompare(String(b.createdAt)));
   const urgRank = {}; pend.filter(j=>j.priority>0).sort((a,b)=>a.priority-b.priority).forEach((j,i)=>urgRank[j.id]=i+1);
-  document.getElementById('list').innerHTML = L.length ? L.map(j=>jobCard(j,urgRank[j.id])).join('') :
+  // ---- group: ด่วน / เที่ยว / ส่งตรง / แพ็คเสร็จ / ขึ้นรถแล้ว ----
+  const gKey = j => j.status==='loaded'?'z|ขึ้นรถแล้ว' : j.status==='packed'?'y|✅ แพ็คเสร็จ รอขึ้นรถ'
+    : j.priority>0?'a|⚡ งานด่วน (ฝ่ายจัดรถขอเร่ง)' : j.trip?('b|'+String(j.trip).padStart(3,'0')+'|🚚 เที่ยว '+j.trip) : 'x|📄 งานส่งตรง (PDF)';
+  const groups={}; L.forEach(j=>{(groups[gKey(j)]=groups[gKey(j)]||[]).push(j);});
+  const html = Object.keys(groups).sort().map(k=>{
+    const g=groups[k], label=k.split('|').pop();
+    const doz=g.reduce((s,j)=>s+(+j.totalDoz||0),0), sk=g.reduce((s,j)=>s+(+(j.status==='pending'?j.estSacks:j.packedSacks)||0),0);
+    return `<div class="grp"><span>${esc(label)}</span><span class="gs">${g.length} งาน · ${fmt(doz)} โหล · ${j0(g)?'≈':''}${fmt(sk)} กส.</span></div>`+g.map(j=>jobCard(j,urgRank[j.id])).join('');
+  }).join('');
+  document.getElementById('list').innerHTML = L.length ? html :
     `<div class="empty">ไม่มีงานในมุมมองนี้${JOBS.length?'':'<br><br>เริ่มจากแท็บ “📥 นำเข้าไฟล์”'}</div>`;
+}
+function j0(g){ return g.some(j=>j.status==='pending'); }
+
+function colorSummary(items){
+  const t={}; items.forEach(i=>{ const k=i.color; t[k]=(t[k]||0)+(+i.qty||0); });
+  return Object.keys(t).sort(colorSort).map(c=>`<span class="cs">${dot(c)}${esc(c)} <b>${fmt(t[c]/12)}</b></span>`).join('');
 }
 
 function jobCard(j, urgNo){
-  const open = OPEN.has(j.id) || (j.status==='pending' && !CLOSED.has(j.id));
-  const st = {pending:['b-pending','รอแพ็ค'],packed:['b-packed','แพ็คเสร็จ'],loaded:['b-loaded','ขึ้นรถแล้ว']}[j.status]||['b-pending',j.status];
+  const open = OPEN.has(j.id) || ALLOPEN;
   const urgent = j.status==='pending' && j.priority>0;
-  let acts='';
+  const id = esc(j.id);
+  let acts='', quick='';
   if(j.status==='pending'){
-    if(can('pack')) acts+=`<button class="btn btn-pack" onclick="openPack('${esc(j.id)}')">✅ แพ็คเสร็จ</button>`;
-    if(can('urgent')) acts+= j.priority>0 ? `<button class="btn btn-urg off" onclick="unUrg('${esc(j.id)}')">ยกเลิกด่วน</button>` : `<button class="btn btn-urg" onclick="openUrg('${esc(j.id)}')">⚡ ขอด่วน</button>`;
+    if(can('pack')){ acts+=`<button class="btn btn-pack" onclick="openPack('${id}')">✅ แพ็คเสร็จ</button>`; quick=`<button class="qb q-pack" onclick="event.stopPropagation();openPack('${id}')">✅ แพ็คเสร็จ</button>`; }
+    if(can('urgent')){ acts+= j.priority>0 ? `<button class="btn btn-urg off" onclick="unUrg('${id}')">ยกเลิกด่วน</button>` : `<button class="btn btn-urg" onclick="openUrg('${id}')">⚡ ขอด่วน</button>`;
+      if(!quick && !j.priority) quick=`<button class="qb q-urg" onclick="event.stopPropagation();openUrg('${id}')">⚡ ขอด่วน</button>`; }
   }
   if(j.status==='packed'){
-    if(can('load')) acts+=`<button class="btn btn-load" onclick="act('setLoaded','${esc(j.id)}')">🚚 ขึ้นรถแล้ว</button>`;
-    if(can('pack')) acts+=`<button class="btn btn-ghost" onclick="act('undo','${esc(j.id)}','ย้อนกลับเป็น “รอแพ็ค”?')">↩ ย้อนเป็นรอแพ็ค</button>`;
+    if(can('load')){ acts+=`<button class="btn btn-load" onclick="act('setLoaded','${id}')">🚚 ขึ้นรถแล้ว</button>`; quick=`<button class="qb q-load" onclick="event.stopPropagation();act('setLoaded','${id}')">🚚 ขึ้นรถแล้ว</button>`; }
+    if(can('pack')) acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ย้อนกลับเป็น “รอแพ็ค”?')">↩ ย้อนเป็นรอแพ็ค</button>`;
   }
-  if(j.status==='loaded' && can('load')) acts+=`<button class="btn btn-ghost" onclick="act('undo','${esc(j.id)}','ย้อนกลับเป็น “แพ็คเสร็จ”?')">↩ ย้อนสถานะ</button>`;
-  if(can('del')) acts+=`<button class="btn btn-del" onclick="act('deleteJob','${esc(j.id)}','ลบงานนี้ออกจากระบบ?')">🗑 ลบ</button>`;
+  if(j.status==='loaded' && can('load')) acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ย้อนกลับเป็น “แพ็คเสร็จ”?')">↩ ย้อนสถานะ</button>`;
+  if(can('del')) acts+=`<button class="btn btn-del" onclick="act('deleteJob','${id}','ลบงานนี้ออกจากระบบ?')">🗑 ลบ</button>`;
   const meta=[ j.createdAt?`นำเข้า ${tShort(j.createdAt)} โดย ${esc(j.createdBy)}`:'',
     j.packedAt?`แพ็คเสร็จ ${tShort(j.packedAt)} โดย ${esc(j.packedBy)}`:'', j.loadedAt?`ขึ้นรถ ${tShort(j.loadedAt)} โดย ${esc(j.loadedBy)}`:''].filter(Boolean).join(' · ');
-  return `<div class="job st-${j.status} ${urgent?'urgent':''}">
-    <div class="jh" onclick="toggle('${esc(j.id)}')">
+  const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:''].filter(Boolean).join('');
+  const right = j.status==='pending'
+    ? `<div class="big">${fmt(j.totalDoz)}<small> โหล</small></div><div class="sm">${j.estSacks?`≈${fmt(j.estSacks)} กส.`:fmt(j.totalPairs)+' คู่'}</div>`
+    : `<div class="big" style="color:var(--green)">${fmt(j.packedSacks)}<small> กส.</small></div><div class="sm">${fmt(j.totalDoz)} โหล</div>`;
+  return `<div class="job st-${j.status} ${urgent?'urgent':''} ${open?'open':''}">
+    <div class="jh" onclick="toggle('${id}')">
+      <div class="chev">${open?'▾':'▸'}</div>
       <div class="jmain">
-        <div class="jt">${urgent?`<span class="badge b-urgent">⚡ ด่วน #${urgNo}</span>`:''}${esc(j.custName)} <span class="badge ${st[0]}">${st[1]}</span></div>
-        <div class="jsub">
-          <span class="mono">${esc(j.docNo||'-')}</span>
-          ${j.custCode?`<span>รหัส <b>${esc(j.custCode)}</b></span>`:''}
-          ${j.trip?`<span>เที่ยว <b>${esc(j.trip)}</b></span>`:''}
-          ${j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:''}
-          ${j.transport?`<span>🚚 ${esc(j.transport)}</span>`:''}
-          <span class="badge b-src">${j.source==='PDF'?'ส่งตรง PDF':'เอเยนต์ Excel'}</span>
-        </div>
+        <div class="jt">${urgent?`<span class="badge b-urgent">⚡ #${urgNo}</span>`:''}<span class="nm">${esc(j.custName)}</span></div>
+        <div class="jsub">${sub}</div>
+        <div class="csum">${colorSummary(j.items)}</div>
       </div>
-      <div class="jtot">${j.status==='pending'
-        ? `<div class="big">${fmt(j.totalDoz)} <span style="font-size:13px">โหล</span></div><div class="sm">${fmt(j.totalPairs)} คู่${j.estSacks?` · ≈${fmt(j.estSacks)} กส.`:''}</div>`
-        : `<div class="big" style="color:var(--green)">${fmt(j.packedSacks)} <span style="font-size:13px">กส.</span></div><div class="sm">${fmt(j.totalDoz)} โหล</div>`}
-      </div>
+      <div class="jtot">${right}</div>
+      ${quick?`<div class="qwrap">${quick}</div>`:''}
     </div>
     ${open?`<div class="jbody">
       ${urgent?`<div class="note pr">⚡ ฝ่ายจัดรถขอเร่ง — ${esc(j.priorityBy)} ${tShort(j.priorityAt)}${j.priorityNote?' · '+esc(j.priorityNote):''}</div>`:''}
@@ -449,13 +482,13 @@ function jobCard(j, urgNo){
       ${j.packNote?`<div class="note pk">📦 หมายเหตุแพ็ค: ${esc(j.packNote)}</div>`:''}
       ${matrix(j.items)}
       ${acts?`<div class="acts">${acts}</div>`:''}
-      <div class="meta">${meta}</div>
+      <div class="meta">${meta} · <span class="badge b-src">${j.source==='PDF'?'ส่งตรง PDF':'เอเยนต์ Excel'}</span>${j.custCode?' · รหัสลูกค้า '+esc(j.custCode):''}</div>
     </div>`:''}
   </div>`;
 }
-const OPEN=new Set(), CLOSED=new Set();
-function toggle(id){ const j=JOBS.find(x=>x.id===id); const isOpen = OPEN.has(id)||(j.status==='pending'&&!CLOSED.has(id));
-  if(isOpen){OPEN.delete(id);CLOSED.add(id);} else {OPEN.add(id);CLOSED.delete(id);} render(); }
+const OPEN=new Set(); let ALLOPEN=false;
+function toggle(id){ if(ALLOPEN){ALLOPEN=false; JOBS.forEach(j=>OPEN.add(j.id));} OPEN.has(id)?OPEN.delete(id):OPEN.add(id); render(); }
+function toggleAll(){ ALLOPEN=!ALLOPEN; if(!ALLOPEN) OPEN.clear(); document.getElementById('btnAll').textContent=ALLOPEN?'ย่อทั้งหมด':'กางทั้งหมด'; render(); }
 function tShort(s){ if(!s) return ''; const d=new Date(s); if(isNaN(d)) return s; const p=n=>String(n).padStart(2,'0'); return `${p(d.getDate())}/${p(d.getMonth()+1)} ${p(d.getHours())}:${p(d.getMinutes())}`; }
 function dot(c){ const h=COLOR_HEX[c]||'#ddd'; return `<span class="dot" style="background:${h}"></span>`; }
 function sizeSort(a,b){ return parseFloat(a)-parseFloat(b); }
