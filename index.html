@@ -140,6 +140,13 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .job.open{box-shadow:0 2px 10px #0001}
 .hasnote{cursor:help}
 @media(max-width:720px){.jh{flex-wrap:wrap}.qwrap{width:100%}.qb{width:100%;padding:10px}.chev{display:none}}
+.dayh{display:flex;justify-content:space-between;align-items:center;background:#e6ebf3;color:var(--navy);border-radius:10px;padding:8px 12px;margin:16px 0 4px;font-weight:700;font-size:15px}
+.dayh:first-child{margin-top:0}
+.dayh .ds{font-size:12.5px;font-weight:600;color:var(--mute)}
+.dayh.td{background:var(--navy);color:#fff}.dayh.td .ds{color:#c9d5e6}
+.dayh.old{background:var(--red-bg);color:var(--red);border:1px solid #f0c4c4}.dayh.old .ds{color:var(--red)}
+.grp{margin-top:8px!important}
+#fDay{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fff}
 @media print{header,.filters,.acts,.kpis,.demo,.tabs{display:none!important}.job{break-inside:avoid;border:1px solid #999}body{background:#fff}}
 </style>
 </head>
@@ -176,6 +183,9 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
       <button class="chip" data-s="all" onclick="setStatus('all')">ทั้งหมด</button>
       <select id="fSrc" onchange="render()"><option value="">ทุกแหล่ง</option><option value="EXCEL">เอเยนต์ (Excel)</option><option value="PDF">ส่งตรง (PDF)</option></select>
       <select id="fTrip" onchange="render()"><option value="">ทุกเที่ยว</option></select>
+      <select id="fDay" onchange="if(this.value==='pick'){fDate.style.display='';fDate.showPicker&&fDate.showPicker();}else{fDate.style.display='none';}render()">
+        <option value="">ทุกวัน</option><option value="today">วันนี้</option><option value="yday">เมื่อวาน</option><option value="pick">เลือกวันที่…</option></select>
+      <input type="date" id="fDate" style="display:none;flex:0;min-width:150px" onchange="render()">
       <button class="chip" id="btnAll" onclick="toggleAll()">กางทั้งหมด</button>
       <input id="fQ" placeholder="🔍 ค้นหา ลูกค้า / SO / IFO / ชื่อกระสอบ" oninput="render()">
     </div>
@@ -410,6 +420,7 @@ function render(){
   const ft=document.getElementById('fTrip'), cur=ft.value;
   ft.innerHTML='<option value="">ทุกเที่ยว</option>'+trips.map(t=>`<option ${t===cur?'selected':''} value="${esc(t)}">เที่ยว ${esc(t)}</option>`).join('');
   const src=fSrc.value, trip=ft.value, q=fQ.value.trim().toLowerCase();
+  const dv=fDay.value, dayF = dv==='today'?dayKey(new Date()) : dv==='yday'?dayKey(new Date(Date.now()-864e5)) : (dv==='pick'&&fDate.value)?fDate.value : '';
   let L = JOBS.filter(j=>{
     if(STATUS==='active' && j.status==='loaded') return false;
     if(STATUS==='pending' && j.status!=='pending') return false;
@@ -418,6 +429,7 @@ function render(){
     if(STATUS==='loaded' && j.status!=='loaded') return false;
     if(src && j.source!==src) return false;
     if(trip && String(j.trip)!==trip) return false;
+    if(dayF && dayKey(j.createdAt)!==dayF) return false;
     if(q && ![j.custName,j.custCode,j.docNo,j.ref,j.sackName,j.note,j.transport].join(' ').toLowerCase().includes(q)) return false;
     return true;
   });
@@ -427,15 +439,28 @@ function render(){
   // ---- group: ด่วน / เที่ยว / ส่งตรง / แพ็คเสร็จ / ขึ้นรถแล้ว ----
   const gKey = j => j.status==='loaded'?'z|ขึ้นรถแล้ว' : j.status==='packed'?'y|✅ แพ็คเสร็จ รอขึ้นรถ'
     : j.priority>0?'a|⚡ งานด่วน (ฝ่ายจัดรถขอเร่ง)' : j.trip?('b|'+String(j.trip).padStart(3,'0')+'|🚚 เที่ยว '+j.trip) : 'x|📄 งานส่งตรง (PDF)';
-  const groups={}; L.forEach(j=>{(groups[gKey(j)]=groups[gKey(j)]||[]).push(j);});
-  const html = Object.keys(groups).sort().map(k=>{
-    const g=groups[k], label=k.split('|').pop();
-    const doz=g.reduce((s,j)=>s+(+j.totalDoz||0),0), sk=g.reduce((s,j)=>s+(+(j.status==='pending'?j.estSacks:j.packedSacks)||0),0);
-    return `<div class="grp"><span>${esc(label)}</span><span class="gs">${g.length} งาน · ${fmt(doz)} โหล · ${j0(g)?'≈':''}${fmt(sk)} กส.</span></div>`+g.map(j=>jobCard(j,urgRank[j.id])).join('');
+  const today=dayKey(new Date());
+  const byDay={}; L.forEach(j=>{const d=dayKey(j.createdAt)||'0000-00-00';(byDay[d]=byDay[d]||[]).push(j);});
+  const days=Object.keys(byDay).sort(); // เก่า → ใหม่ (งานค้างขึ้นก่อน)
+  const html = days.map(d=>{
+    const dj=byDay[d], pendN=dj.filter(j=>j.status==='pending').length, old = d<today && pendN>0;
+    const groups={}; dj.forEach(j=>{(groups[gKey(j)]=groups[gKey(j)]||[]).push(j);});
+    const head=`<div class="dayh ${old?'old':''} ${d===today?'td':''}"><span>📅 นำเข้า ${dayLabel(d)}</span><span class="ds">${old?`⚠ ค้างแพ็ค ${pendN} งาน`:`${dj.length} งาน${pendN?` · รอแพ็ค ${pendN}`:''}`}</span></div>`;
+    return head + Object.keys(groups).sort().map(k=>{
+      const g=groups[k], label=k.split('|').pop();
+      const doz=g.reduce((s,j)=>s+(+j.totalDoz||0),0), sk=g.reduce((s,j)=>s+(+(j.status==='pending'?j.estSacks:j.packedSacks)||0),0);
+      return `<div class="grp"><span>${esc(label)}</span><span class="gs">${g.length} งาน · ${fmt(doz)} โหล · ${j0(g)?'≈':''}${fmt(sk)} กส.</span></div>`+g.map(j=>jobCard(j,urgRank[j.id])).join('');
+    }).join('');
   }).join('');
   document.getElementById('list').innerHTML = L.length ? html :
     `<div class="empty">ไม่มีงานในมุมมองนี้${JOBS.length?'':'<br><br>เริ่มจากแท็บ “📥 นำเข้าไฟล์”'}</div>`;
 }
+const TH_D=['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'], TH_M=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+function dayKey(x){ if(!x) return ''; const d=x instanceof Date?x:new Date(x); if(isNaN(d)) return ''; const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
+function dayLabel(k){ if(k==='0000-00-00') return 'ไม่ทราบวันที่'; const [y,m,dd]=k.split('-').map(Number); const d=new Date(y,m-1,dd);
+  const t=dayKey(new Date()), yd=dayKey(new Date(Date.now()-864e5));
+  return `${TH_D[d.getDay()]} ${dd} ${TH_M[m-1]} ${String(y+543).slice(2)}` + (k===t?' (วันนี้)':k===yd?' (เมื่อวาน)':''); }
+function shortDocDate(s){ return String(s).replace('มกราคม','ม.ค.').replace('กุมภาพันธ์','ก.พ.').replace('มีนาคม','มี.ค.').replace('เมษายน','เม.ย.').replace('พฤษภาคม','พ.ค.').replace('มิถุนายน','มิ.ย.').replace('กรกฎาคม','ก.ค.').replace('สิงหาคม','ส.ค.').replace('กันยายน','ก.ย.').replace('ตุลาคม','ต.ค.').replace('พฤศจิกายน','พ.ย.').replace('ธันวาคม','ธ.ค.'); }
 function j0(g){ return g.some(j=>j.status==='pending'); }
 
 function colorSummary(items){
@@ -461,7 +486,7 @@ function jobCard(j, urgNo){
   if(can('del')) acts+=`<button class="btn btn-del" onclick="act('deleteJob','${id}','ลบงานนี้ออกจากระบบ?')">🗑 ลบ</button>`;
   const meta=[ j.createdAt?`นำเข้า ${tShort(j.createdAt)} โดย ${esc(j.createdBy)}`:'',
     j.packedAt?`แพ็คเสร็จ ${tShort(j.packedAt)} โดย ${esc(j.packedBy)}`:'', j.loadedAt?`ขึ้นรถ ${tShort(j.loadedAt)} โดย ${esc(j.loadedBy)}`:''].filter(Boolean).join(' · ');
-  const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:''].filter(Boolean).join('');
+  const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.docDate?`<span title="วันที่ในเอกสาร">🗓 ${esc(shortDocDate(j.docDate))}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:''].filter(Boolean).join('');
   const right = j.status==='pending'
     ? `<div class="big">${fmt(j.totalDoz)}<small> โหล</small></div><div class="sm">${j.estSacks?`≈${fmt(j.estSacks)} กส.`:fmt(j.totalPairs)+' คู่'}</div>`
     : `<div class="big" style="color:var(--green)">${fmt(j.packedSacks)}<small> กส.</small></div><div class="sm">${fmt(j.totalDoz)} โหล</div>`;
