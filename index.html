@@ -396,10 +396,15 @@ function demoApi(p){
 function demoLine(t){ if(t) setTimeout(()=>toast('📱 (ทดลอง) จะส่ง LINE →\n'+t, 3500), 900); }
 
 /* ================== UI: LIST ================== */
+let OPS=0, OPVER=0;
 async function refresh(manual){
+  if(OPS>0) return;                       // กำลังบันทึกอยู่ — รอให้เสร็จก่อน
+  const ver=OPVER;
   try{
-    document.getElementById('sync').textContent = 'กำลังโหลด…';
-    JOBS = (await loadJobs()).map(normJob);
+    if(manual) document.getElementById('sync').textContent = 'กำลังโหลด…';
+    const data=(await loadJobs()).map(normJob);
+    if(OPS>0 || ver!==OPVER) return;      // มีการกดระหว่างโหลด — ทิ้งข้อมูลเก่า
+    JOBS = data;
     const d=new Date(); document.getElementById('sync').textContent = 'อัปเดต '+d.toTimeString().slice(0,5);
     render(); if(document.getElementById('pg-sum').style.display!=='none') renderSum();
     if(manual) toast('รีเฟรชแล้ว');
@@ -542,12 +547,29 @@ function openPack(id){ CUR=JOBS.find(j=>j.id===id); pkSub.textContent=`${CUR.cus
   pkN.value = CUR.estSacks||''; pkHint.textContent = CUR.estSacks?`ประมาณการจากยอด ${fmt(CUR.totalDoz)} โหล ÷ ${CUR.packPerSack||10} โหล/กส. = ${CUR.estSacks} กส. (แก้ได้)`:'กรอกจำนวนกระสอบจริง'; pkNote.value=''; openM('mPack'); setTimeout(()=>pkN.select(),50); }
 function stepS(d){ pkN.value=Math.max(0,(+pkN.value||0)+d); }
 async function confirmPack(){ const n=+pkN.value; if(!(n>0)) return toast('กรุณากรอกจำนวนกระสอบ');
-  await run(pkOk, ()=>callApi({action:'setPacked',id:CUR.id,sacks:n,note:pkNote.value.trim()}), 'บันทึกแพ็คเสร็จแล้ว · แจ้งฝ่ายจัดรถทาง LINE'); closeM('mPack'); }
+  const note=pkNote.value.trim(), id=CUR.id; closeM('mPack');
+  quick(id, j=>Object.assign(j,{status:'packed',packedSacks:n,packNote:note,packedBy:USER?USER.name:'-',packedAt:nowIso()}),
+    {action:'setPacked',id,sacks:n,note}, `✅ แพ็คเสร็จ ${n} กส.`); }
+/* อัปเดตหน้าจอทันที แล้วบันทึกเบื้องหลัง — ถ้าไม่สำเร็จจะย้อนกลับ */
+async function quick(id, mut, payload, okMsg){
+  const j=JOBS.find(x=>x.id===id); if(!j) return;
+  const backup=JSON.stringify(j);
+  OPS++; OPVER++;
+  mut(j); render(); toast(okMsg,1400);
+  document.getElementById('sync').textContent='⏳ กำลังบันทึก…';
+  try{ await callApi(payload); }
+  catch(e){ Object.assign(j, JSON.parse(backup)); render(); toast('⚠ บันทึกไม่สำเร็จ ('+e.message+') — กรุณากดใหม่',4500); }
+  finally{ OPS--; if(OPS===0){ document.getElementById('sync').textContent='✔ บันทึกแล้ว'; setTimeout(()=>refresh(),300); } }
+}
 function openUrg(id){ CUR=JOBS.find(j=>j.id===id); urSub.textContent=`${CUR.custName} · ${CUR.docNo||''} · ${fmt(CUR.totalDoz)} โหล`; urNote.value=''; openM('mUrg'); }
 async function confirmUrg(){ await run(urOk, ()=>callApi({action:'setPriority',id:CUR.id,on:true,note:urNote.value.trim()}), 'แจ้งทีมแพ็คให้เร่งแล้ว'); closeM('mUrg'); }
-async function urg(id,on){ await run(null, ()=>callApi({action:'setPriority',id,on}), on?'⚡ ติดงานด่วนแล้ว':'ยกเลิกด่วนแล้ว'); }
+function urg(id,on){
+  quick(id, j=>{ if(on) Object.assign(j,{priority:Math.max(0,...JOBS.map(x=>+x.priority||0))+1,priorityBy:USER?USER.name:'-',priorityAt:nowIso()}); else Object.assign(j,{priority:0,priorityBy:'',priorityAt:''}); },
+    {action:'setPriority',id,on}, on?'⚡ ติดงานด่วนแล้ว':'ยกเลิกด่วนแล้ว'); }
 async function unUrg(id){ await run(null, ()=>callApi({action:'setPriority',id,on:false}), 'ยกเลิกด่วนแล้ว'); }
-async function act(action,id,confirmMsg){ if(confirmMsg && !confirm(confirmMsg)) return; await run(null, ()=>callApi({action,id}), 'บันทึกแล้ว'); }
+async function act(action,id,confirmMsg){ if(confirmMsg && !confirm(confirmMsg)) return;
+  if(action==='undo') return quick(id, j=>Object.assign(j,{status:'pending',packedSacks:'',packNote:'',packedBy:'',packedAt:''}), {action,id}, '↩ ยกเลิกแพ็คเสร็จแล้ว');
+  await run(null, ()=>callApi({action,id}), 'บันทึกแล้ว'); }
 async function run(btn, fn, okMsg){
   if(BUSY) return; BUSY=true; if(btn){btn.disabled=true;}
   try{ await fn(); toast('✔ '+okMsg); await refresh(); }
