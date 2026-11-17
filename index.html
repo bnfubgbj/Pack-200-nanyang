@@ -159,6 +159,10 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .grp .bulk{margin-left:8px;padding:5px 10px;font-size:12px}
 .kpi.k4 .v{color:#555}
 body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหนก็ได้ เพื่อนำเข้า';position:fixed;inset:10px;border:4px dashed var(--navy2);border-radius:20px;background:#e8f0fecc;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:var(--navy);z-index:100;pointer-events:none}
+.names{display:flex;flex-wrap:wrap;gap:8px}
+.nm-b{font:inherit;font-weight:600;font-size:16px;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:10px 16px;cursor:pointer}
+.nm-b.on{border-color:var(--navy2);background:var(--navy2);color:#fff}
+#mUser .modal{max-width:400px}
 @media print{header,.filters,.acts,.kpis,.demo,.tabs{display:none!important}.job{break-inside:avoid;border:1px solid #999}body{background:#fff}}
 </style>
 </head>
@@ -170,7 +174,7 @@ body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหน
     <span class="sync" id="sync"></span>
     <button class="iconbtn" onclick="refresh(true)" title="รีเฟรช">⟳</button>
     <button class="iconbtn" onclick="window.print()" title="พิมพ์ใบงาน">🖨</button>
-    <div class="who" onclick="openUser()"><b id="uName">-</b><span class="rolepill" id="uRole">-</span></div>
+    <div class="who" onclick="whoClick()"><b id="uName">-</b><span class="rolepill" id="uRole">-</span></div>
   </div>
   <div class="tabs">
     <button class="tab on" data-tab="list" onclick="showTab('list')">📋 งานแพ็ค</button>
@@ -224,14 +228,16 @@ body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหน
 
 <!-- modals -->
 <div class="mask" id="mUser"><div class="modal">
-  <h3>ผู้ใช้งาน</h3><div class="sub">ใส่ชื่อครั้งเดียว ระบบจะจำไว้ในเครื่องนี้ — ใช้บันทึกว่าใครแพ็ค/ใครติดด่วน</div>
-  <label>ชื่อเล่น / ชื่อ</label><input id="inName" placeholder="เช่น สุ, ฟ้า, ชัย">
-
-  <details style="margin-top:12px"><summary style="cursor:pointer;font-size:13px;color:var(--mute)">⚙️ ตั้งค่าการเชื่อมต่อ (ผู้ดูแลระบบ)</summary>
+  <h3>🔒 เข้าสู่ระบบ</h3><div class="sub">เลือกชื่อของคุณ แล้วใส่รหัสผ่าน</div>
+  <label>ชื่อ</label>
+  <div class="names" id="nameBox"><span style="color:var(--mute);font-size:13px">กำลังโหลดรายชื่อ…</span></div>
+  <label>รหัสผ่าน</label><input id="inPass" type="password" autocomplete="current-password" placeholder="รหัสผ่าน" onkeydown="if(event.key==='Enter')doLogin()">
+  <div id="loginErr" style="color:var(--red);font-size:13px;margin-top:6px;min-height:18px"></div>
+  <details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--mute)">⚙️ ตั้งค่าการเชื่อมต่อ (ผู้ดูแลระบบ)</summary>
     <label>Apps Script Web App URL</label><input id="inApi" placeholder="https://script.google.com/macros/s/.../exec">
-    <div style="font-size:12px;color:var(--mute);margin-top:4px">เว้นว่าง = โหมดทดลอง (เก็บในเครื่อง)</div>
+    <div style="font-size:12px;color:var(--mute);margin-top:4px">เว้นว่าง = ใช้ค่าในโค้ด</div>
   </details>
-  <div class="mact"><button class="btn btn-load" onclick="saveUser()">บันทึก</button></div>
+  <div class="mact"><button class="btn btn-load" id="loginBtn" onclick="doLogin()" style="width:100%">เข้าสู่ระบบ</button></div>
 </div></div>
 
 <div class="mask" id="mPack"><div class="modal">
@@ -365,7 +371,8 @@ function parseExcelRows(rows,fileName){
 /* ================== STATE ================== */
 let JOBS = [], STATUS = 'active', PREVIEW = [], BUSY = false;
 const LS = { get:(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}}, set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}} };
-let USER = LS.get('pk_user', null);
+let USER = LS.get('pk_auth', null);   // {name, pass}
+const DEMO_USERS = {'สุกี้':'suki_123','ชัย':'chai_123','ป้อง':'pong_123','ฟ้า':'fah_123','ต่อ':'tor_123'};
 const api = () => (LS.get('pk_api', '') || DEFAULT_API).trim();
 const isDemo = () => !api();
 const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -376,16 +383,20 @@ const can = a => true; const _canOld = a => { const r = USER && USER.role; if(r=
 /* ================== BACKEND ================== */
 async function callApi(payload){
   if(isDemo()) return demoApi(payload);
-  const res = await fetch(api(), {method:'POST', body:JSON.stringify(Object.assign({user:USER?USER.name:'-'},payload))});
-  const j = await res.json(); if(!j.ok) throw new Error(j.error||'error'); return j;
+  const res = await fetch(api(), {method:'POST', body:JSON.stringify(Object.assign({user:USER?USER.name:'', pass:USER?USER.pass:''},payload))});
+  const j = await res.json();
+  if(!j.ok){ if(j.error==='AUTH' && payload.action!=='login'){ logout(true); } throw new Error(j.msg||j.error||'error'); }
+  return j;
 }
 async function loadJobs(){
+  if(!USER) return [];
   if(isDemo()) return LS.get('pk_demo_jobs', []);
-  const res = await fetch(api()+'?action=list&t='+Date.now()); const j = await res.json();
-  if(!j.ok) throw new Error(j.error); return j.jobs;
+  return (await callApi({action:'list'})).jobs;
 }
 function nowIso(){const d=new Date();const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;}
 function demoApi(p){
+  if(p.action==='users') return {ok:true,users:Object.keys(DEMO_USERS)};
+  if(p.action==='login'){ if(DEMO_USERS[p.user]===p.pass) return {ok:true,user:p.user}; throw new Error('ชื่อหรือรหัสผ่านไม่ถูกต้อง'); }
   let jobs = LS.get('pk_demo_jobs', []); const u = USER?USER.name:'-'; const f = id => jobs.find(j=>j.id===id);
   let line = '';
   if(p.action==='addJobs'){ let a=0,s=0; p.jobs.forEach(j=>{ if(f(j.id)){s++;return;} jobs.push(Object.assign({},j,{status:'pending',priority:0,createdBy:u,createdAt:nowIso()})); a++; });
@@ -704,16 +715,33 @@ function showTab(t){ ['list','import','sum'].forEach(x=>document.getElementById(
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t)); if(t==='sum') renderSum(); }
 function openM(id){document.getElementById(id).classList.add('on')} function closeM(id){document.getElementById(id).classList.remove('on')}
 let tt; function toast(m,ms=2600){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; clearTimeout(tt); tt=setTimeout(()=>t.style.display='none',ms); }
-let ROLE_SEL=null;
-function openUser(){ inName.value=USER?USER.name:''; inApi.value=LS.get('pk_api',''); openM('mUser'); setTimeout(()=>inName.focus(),50); }
-function drawRoles(){ roleBox.innerHTML=Object.entries(ROLES).map(([k,r])=>`<button class="role ${ROLE_SEL===k?'on':''}" onclick="ROLE_SEL='${k}';drawRoles()"><b>${r.name}</b><span>${r.desc}</span></button>`).join(''); }
-function saveUser(){ const n=inName.value.trim(); if(!n) return toast('กรุณาใส่ชื่อ'); 
-  USER={name:n,role:'all'}; LS.set('pk_user',USER); LS.set('pk_api',inApi.value.trim()); closeM('mUser'); applyUser(); refresh(); }
-function applyUser(){ uName.textContent=USER?USER.name:'-'; uRole.textContent=USER?'เปลี่ยนชื่อ':'ใส่ชื่อ';
-  tabImport.style.display=can('import')?'':'none'; demoBar.style.display=isDemo()?'':'none'; render(); }
+let NAME_SEL=null, NAMES=[];
+async function openUser(){
+  inPass.value=''; loginErr.textContent=''; inApi.value=LS.get('pk_api',''); NAME_SEL=null; openM('mUser');
+  try{ const r=await callApi({action:'users'}); NAMES=r.users||[]; drawNames(); }
+  catch(e){ nameBox.innerHTML='<input id="inName" placeholder="พิมพ์ชื่อ">'; }
+}
+function drawNames(){ nameBox.innerHTML=NAMES.map((n,i)=>`<button class="nm-b ${NAME_SEL===n?'on':''}" onclick="NAME_SEL=NAMES[${i}];drawNames();inPass.focus()">${esc(n)}</button>`).join(''); }
+async function doLogin(){
+  LS.set('pk_api',inApi.value.trim());
+  const name = NAME_SEL || (document.getElementById('inName')||{}).value || '';
+  const pass = inPass.value.trim();
+  if(!name) return loginErr.textContent='กรุณาเลือกชื่อ';
+  if(!pass) return loginErr.textContent='กรุณาใส่รหัสผ่าน';
+  loginBtn.disabled=true; loginBtn.textContent='กำลังตรวจสอบ…';
+  try{ await callApi({action:'login',user:name.trim(),pass}); USER={name:name.trim(),pass}; LS.set('pk_auth',USER);
+       closeM('mUser'); applyUser(); refresh(); toast('👋 สวัสดี '+USER.name); }
+  catch(e){ loginErr.textContent='❌ '+e.message; }
+  finally{ loginBtn.disabled=false; loginBtn.textContent='เข้าสู่ระบบ'; }
+}
+function logout(expired){ USER=null; try{localStorage.removeItem('pk_auth')}catch(e){} JOBS=[]; applyUser(); openUser(); if(expired) loginErr.textContent='รหัสผ่านถูกเปลี่ยน หรือหมดสิทธิ์ — กรุณาเข้าสู่ระบบใหม่'; }
+function applyUser(){ uName.textContent=USER?USER.name:'-'; uRole.textContent=USER?'ออกจากระบบ':'เข้าสู่ระบบ';
+  demoBar.style.display=isDemo()?'':'none'; render(); }
+function whoClick(){ if(USER){ if(confirm('ออกจากระบบ?')) logout(); } else openUser(); }
 
-applyUser(); refresh();
-if(!USER) openUser();
+
+applyUser();
+if(USER) refresh(); else openUser();
 setInterval(()=>{ if(!document.hidden && !document.querySelector('.mask.on')) refresh(); }, REFRESH_SEC*1000);
 </script>
 </body>
