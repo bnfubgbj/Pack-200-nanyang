@@ -32,7 +32,7 @@ header{background:var(--navy);color:#fff;position:sticky;top:0;z-index:20;box-sh
 .tab.on{color:#fff;border-color:#f6c34a}
 main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .demo{background:#fff8db;border:1px dashed #d4a72c;color:#7a5a00;padding:8px 12px;border-radius:10px;font-size:13px;margin-bottom:12px}
-.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
 .kpi{background:var(--card);border-radius:var(--r);padding:12px 14px;border:1px solid var(--line);cursor:pointer}
 .kpi .l{font-size:12.5px;color:var(--mute)}
 .kpi .v{font-size:26px;font-weight:700;line-height:1.2}
@@ -120,7 +120,7 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .role span{font-size:12px;color:var(--mute)}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#1d2433;color:#fff;padding:10px 16px;border-radius:10px;z-index:60;font-size:14px;max-width:92vw;white-space:pre-line;display:none}
 .sync{font-size:12px;color:#c9d5e6}
-@media(max-width:720px){.kpis{grid-template-columns:repeat(3,1fr)}.kpi{padding:10px}.kpi .v{font-size:22px}.logo span.t2{display:none}.jtot .big{font-size:17px}}
+@media(max-width:720px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi{padding:10px}.kpi .v{font-size:22px}.logo span.t2{display:none}.jtot .big{font-size:17px}}
 .grp{display:flex;justify-content:space-between;align-items:baseline;margin:14px 2px 2px;font-weight:700;color:var(--navy);font-size:14.5px}
 .grp .gs{font-weight:500;color:var(--mute);font-size:12.5px}
 .grp:first-child{margin-top:0}
@@ -155,6 +155,9 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .q-urg-on{background:var(--amber);color:#fff}
 .job.st-packed,.job.st-loaded{opacity:.85;border-left-color:var(--green)!important}
 @media(max-width:720px){.qwrap .qb{flex:1}}
+.job.st-loaded{opacity:.6;border-left-color:#9ca3af!important}
+.grp .bulk{margin-left:8px;padding:5px 10px;font-size:12px}
+.kpi.k4 .v{color:#555}
 @media print{header,.filters,.acts,.kpis,.demo,.tabs{display:none!important}.job{break-inside:avoid;border:1px solid #999}body{background:#fff}}
 </style>
 </head>
@@ -183,7 +186,8 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
     <div class="kpis">
       <div class="kpi k1" data-f="pending" onclick="setStatus('pending')"><div class="l">📦 รอแพ็ค</div><div class="v" id="kP">0</div><div class="s" id="kPs">-</div></div>
       <div class="kpi k2" data-f="urgent" onclick="setStatus('urgent')"><div class="l">⚡ งานด่วน</div><div class="v" id="kU">0</div><div class="s">รอแพ็ค</div></div>
-      <div class="kpi k3" data-f="packed" onclick="setStatus('packed')"><div class="l">✅ แพ็คเสร็จ (วันนี้)</div><div class="v" id="kK">0</div><div class="s" id="kKs">-</div></div>
+      <div class="kpi k3" data-f="packed" onclick="setStatus('packed')"><div class="l">✅ แพ็คเสร็จ รอส่ง</div><div class="v" id="kK">0</div><div class="s" id="kKs">-</div></div>
+      <div class="kpi k4" data-f="loaded" onclick="setStatus('loaded')"><div class="l">🚚 ส่งแล้ว (วันนี้)</div><div class="v" id="kL">0</div><div class="s" id="kLs">-</div></div>
     </div>
     <div class="filters">
       <button class="chip" data-s="active" onclick="setStatus('active')">ล่าสุด</button>
@@ -419,10 +423,11 @@ function setStatus(s){ STATUS = s; render(); }
 
 function render(){
   const pend = JOBS.filter(j=>j.status==='pending'), urg = pend.filter(j=>j.priority>0),
-        pk = JOBS.filter(j=>j.status!=='pending'&&isToday(j.packedAt));
+        pk = JOBS.filter(j=>j.status==='packed'), ld = JOBS.filter(j=>j.status==='loaded'&&isToday(j.loadedAt));
   const sum = (a,k)=>a.reduce((s,j)=>s+(+j[k]||0),0);
   kP.textContent=pend.length; kPs.textContent=fmt(sum(pend,'totalDoz'))+' โหล · ≈'+fmt(sum(pend,'estSacks'))+' กส.';
   kU.textContent=urg.length; kK.textContent=pk.length; kKs.textContent=fmt(sum(pk,'packedSacks'))+' กส.';
+  kL.textContent=ld.length; kLs.textContent=fmt(sum(ld,'packedSacks'))+' กส.';
   document.querySelectorAll('.kpi').forEach(k=>k.classList.toggle('sel',k.dataset.f===STATUS));
   document.querySelectorAll('.chip[data-s]').forEach(c=>c.classList.toggle('on',c.dataset.s===STATUS));
   // trips
@@ -432,22 +437,22 @@ function render(){
   const src=fSrc.value, trip=ft.value, q=fQ.value.trim().toLowerCase();
   const dv=fDay.value, dayF = dv==='today'?dayKey(new Date()) : dv==='yday'?dayKey(new Date(Date.now()-864e5)) : (dv==='pick'&&fDate.value)?fDate.value : '';
   let L = JOBS.filter(j=>{
-    const recent = j.status==='pending' || (Date.now()-new Date(j.packedAt||j.createdAt))<3*864e5;
-    if(STATUS==='active' && !recent) return false;
+    if(STATUS==='active' && j.status==='loaded') return false;   // ส่งแล้ว = เคลียร์ออกจากหน้าหลัก
     if(STATUS==='pending' && j.status!=='pending') return false;
     if(STATUS==='urgent' && !(j.status==='pending'&&j.priority>0)) return false;
-    if(STATUS==='packed' && !(j.status!=='pending'&&isToday(j.packedAt))) return false;
+    if(STATUS==='packed' && j.status!=='packed') return false;
+    if(STATUS==='loaded' && j.status!=='loaded') return false;
     if(src && j.source!==src) return false;
     if(trip && String(j.trip)!==trip) return false;
     if(dayF && dayKey(j.createdAt)!==dayF) return false;
     if(q && ![j.custName,j.custCode,j.docNo,j.ref,j.sackName,j.note,j.transport].join(' ').toLowerCase().includes(q)) return false;
     return true;
   });
-  const rank = j => j.status==='pending'?(j.priority>0?0:1):2;
+  const rank = j => j.status==='pending'?(j.priority>0?0:1):(j.status==='packed'?2:3);
   L.sort((a,b)=> rank(a)-rank(b) || (rank(a)===0? a.priority-b.priority:0) || String(a.trip||99).localeCompare(String(b.trip||99),undefined,{numeric:true}) || String(a.createdAt).localeCompare(String(b.createdAt)));
   const urgRank = {}; pend.filter(j=>j.priority>0).sort((a,b)=>a.priority-b.priority).forEach((j,i)=>urgRank[j.id]=i+1);
   // ---- group: ด่วน / เที่ยว / ส่งตรง / แพ็คเสร็จ / ขึ้นรถแล้ว ----
-  const gKey = j => j.status!=='pending'?'y|✅ แพ็คเสร็จแล้ว'
+  const gKey = j => j.status==='loaded'?'z|🚚 ส่งแล้ว' : j.status==='packed'?'y|✅ แพ็คเสร็จ — รอขึ้นรถ'
     : j.priority>0?'a|⚡ งานด่วน — แพ็คก่อน' : j.trip?('b|'+String(j.trip).padStart(3,'0')+'|🚚 เที่ยว '+j.trip) : 'x|📄 งานส่งตรง (PDF)';
   const today=dayKey(new Date());
   const byDay={}; L.forEach(j=>{const d=dayKey(j.createdAt)||'0000-00-00';(byDay[d]=byDay[d]||[]).push(j);});
@@ -459,7 +464,8 @@ function render(){
     return head + Object.keys(groups).sort().map(k=>{
       const g=groups[k], label=k.split('|').pop();
       const doz=g.reduce((s,j)=>s+(+j.totalDoz||0),0), sk=g.reduce((s,j)=>s+(+(j.status==='pending'?j.estSacks:j.packedSacks)||0),0);
-      return `<div class="grp"><span>${esc(label)}</span><span class="gs">${g.length} งาน · ${fmt(doz)} โหล · ${j0(g)?'≈':''}${fmt(sk)} กส.</span></div>`+g.map(j=>jobCard(j,urgRank[j.id])).join('');
+      const bulk = k.startsWith('y|') && g.length>1 ? `<button class="qb q-load bulk" onclick="loadAll('${g.map(j=>esc(j.id)).join(',')}')">🚚 ส่งแล้วทั้งหมด ${g.length} งาน</button>` : '';
+      return `<div class="grp"><span>${esc(label)}</span><span class="gs">${g.length} งาน · ${fmt(doz)} โหล · ${j0(g)?'≈':''}${fmt(sk)} กส. ${bulk}</span></div>`+g.map(j=>jobCard(j,urgRank[j.id])).join('');
     }).join('');
   }).join('');
   document.getElementById('list').innerHTML = L.length ? html :
@@ -485,12 +491,15 @@ function jobCard(j, urgNo){
   let acts='', quick='';
   if(j.status==='pending'){
     quick=`<button class="qb ${j.priority>0?'q-urg-on':'q-urg'}" onclick="event.stopPropagation();urg('${id}',${j.priority>0?'false':'true'})">${j.priority>0?'⚡ ด่วน ✓':'⚡ ด่วน'}</button><button class="qb q-pack" onclick="event.stopPropagation();openPack('${id}')">✅ แพ็คเสร็จ</button>`;
-  } else {
+  } else if(j.status==='packed'){
+    quick=`<button class="qb q-load" onclick="event.stopPropagation();loadOne('${id}')">🚚 ขึ้นรถ/ส่งแล้ว</button>`;
     acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “แพ็คเสร็จ” กลับเป็นรอแพ็ค?')">↩ ยกเลิกแพ็คเสร็จ</button>`;
+  } else {
+    acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “ส่งแล้ว” กลับเป็นแพ็คเสร็จ?')">↩ ยกเลิกส่งแล้ว</button>`;
   }
   acts+=`<button class="btn btn-del" onclick="act('deleteJob','${id}','ลบงานนี้ออกจากระบบ?')">🗑 ลบงาน</button>`;
   const meta=[ j.createdAt?`นำเข้า ${tShort(j.createdAt)} โดย ${esc(j.createdBy)}`:'',
-    j.packedAt?`แพ็คเสร็จ ${tShort(j.packedAt)} โดย ${esc(j.packedBy)}`:''].filter(Boolean).join(' · ');
+    j.packedAt?`แพ็คเสร็จ ${tShort(j.packedAt)} โดย ${esc(j.packedBy)}`:'', j.loadedAt?`ส่งแล้ว ${tShort(j.loadedAt)} โดย ${esc(j.loadedBy)}`:''].filter(Boolean).join(' · ');
   const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.docDate?`<span title="วันที่ในเอกสาร">🗓 ${esc(shortDocDate(j.docDate))}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:''].filter(Boolean).join('');
   const right = j.status==='pending'
     ? `<div class="big">${fmt(j.totalDoz)}<small> โหล</small></div><div class="sm">${j.estSacks?`≈${fmt(j.estSacks)} กส.`:fmt(j.totalPairs)+' คู่'}</div>`
@@ -567,8 +576,12 @@ function urg(id,on){
   quick(id, j=>{ if(on) Object.assign(j,{priority:Math.max(0,...JOBS.map(x=>+x.priority||0))+1,priorityBy:USER?USER.name:'-',priorityAt:nowIso()}); else Object.assign(j,{priority:0,priorityBy:'',priorityAt:''}); },
     {action:'setPriority',id,on}, on?'⚡ ติดงานด่วนแล้ว':'ยกเลิกด่วนแล้ว'); }
 async function unUrg(id){ await run(null, ()=>callApi({action:'setPriority',id,on:false}), 'ยกเลิกด่วนแล้ว'); }
+function loadOne(id){ quick(id, j=>Object.assign(j,{status:'loaded',loadedBy:USER?USER.name:'-',loadedAt:nowIso(),priority:0}), {action:'setLoaded',id}, '🚚 ส่งแล้ว — เคลียร์ออกจากรายการ'); }
+async function loadAll(ids){ ids=ids.split(','); if(!confirm(`ยืนยันว่าขึ้นรถ/ส่งแล้วทั้ง ${ids.length} งาน?`)) return;
+  for(const id of ids){ quick(id, j=>Object.assign(j,{status:'loaded',loadedBy:USER?USER.name:'-',loadedAt:nowIso(),priority:0}), {action:'setLoaded',id}, `🚚 ส่งแล้ว ${ids.length} งาน`); } }
 async function act(action,id,confirmMsg){ if(confirmMsg && !confirm(confirmMsg)) return;
-  if(action==='undo') return quick(id, j=>Object.assign(j,{status:'pending',packedSacks:'',packNote:'',packedBy:'',packedAt:''}), {action,id}, '↩ ยกเลิกแพ็คเสร็จแล้ว');
+  if(action==='undo'){ const j=JOBS.find(x=>x.id===id); if(j&&j.status==='loaded') return quick(id, j=>Object.assign(j,{status:'packed',loadedBy:'',loadedAt:''}), {action,id}, '↩ ยกเลิกส่งแล้ว');
+    return quick(id, j=>Object.assign(j,{status:'pending',packedSacks:'',packNote:'',packedBy:'',packedAt:''}), {action,id}, '↩ ยกเลิกแพ็คเสร็จแล้ว'); }
   await run(null, ()=>callApi({action,id}), 'บันทึกแล้ว'); }
 async function run(btn, fn, okMsg){
   if(BUSY) return; BUSY=true; if(btn){btn.disabled=true;}
