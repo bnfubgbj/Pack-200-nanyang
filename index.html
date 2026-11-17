@@ -196,7 +196,7 @@ body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหน
       <select id="fSrc" onchange="render()"><option value="">ทุกแหล่ง</option><option value="EXCEL">เอเยนต์ (Excel)</option><option value="PDF">ส่งตรง (PDF)</option></select>
       <select id="fTrip" onchange="render()"><option value="">ทุกเที่ยว</option></select>
       <select id="fDay" onchange="if(this.value==='pick'){fDate.style.display='';fDate.showPicker&&fDate.showPicker();}else{fDate.style.display='none';}render()">
-        <option value="">ทุกวัน</option><option value="today">วันนี้</option><option value="yday">เมื่อวาน</option><option value="pick">เลือกวันที่…</option></select>
+        <option value="">ทุกวัน</option><option value="today">วันนี้</option><option value="tmr">พรุ่งนี้</option><option value="yday">เมื่อวาน</option><option value="pick">เลือกวันที่…</option></select>
       <input type="date" id="fDate" style="display:none;flex:0;min-width:150px" onchange="render()">
       <button class="chip" id="btnAll" onclick="toggleAll()">กางทั้งหมด</button>
       <input id="fQ" placeholder="🔍 ค้นหา ลูกค้า / SO / IFO / ชื่อกระสอบ" oninput="render()">
@@ -436,7 +436,7 @@ function render(){
   const ft=document.getElementById('fTrip'), cur=ft.value;
   ft.innerHTML='<option value="">ทุกเที่ยว</option>'+trips.map(t=>`<option ${t===cur?'selected':''} value="${esc(t)}">เที่ยว ${esc(t)}</option>`).join('');
   const src=fSrc.value, trip=ft.value, q=fQ.value.trim().toLowerCase();
-  const dv=fDay.value, dayF = dv==='today'?dayKey(new Date()) : dv==='yday'?dayKey(new Date(Date.now()-864e5)) : (dv==='pick'&&fDate.value)?fDate.value : '';
+  const dv=fDay.value, dayF = dv==='today'?dayKey(new Date()) : dv==='yday'?dayKey(new Date(Date.now()-864e5)) : dv==='tmr'?dayKey(new Date(Date.now()+864e5)) : (dv==='pick'&&fDate.value)?fDate.value : '';
   let L = JOBS.filter(j=>{
     if(STATUS==='active' && j.status==='loaded') return false;   // ส่งแล้ว = เคลียร์ออกจากหน้าหลัก
     if(STATUS==='pending' && j.status!=='pending') return false;
@@ -445,7 +445,7 @@ function render(){
     if(STATUS==='loaded' && j.status!=='loaded') return false;
     if(src && j.source!==src) return false;
     if(trip && String(j.trip)!==trip) return false;
-    if(dayF && dayKey(j.createdAt)!==dayF) return false;
+    if(dayF && jobDay(j)!==dayF) return false;
     if(q && ![j.custName,j.custCode,j.docNo,j.ref,j.sackName,j.note,j.transport].join(' ').toLowerCase().includes(q)) return false;
     return true;
   });
@@ -456,12 +456,12 @@ function render(){
   const gKey = j => j.status==='loaded'?'z|🚚 ส่งแล้ว' : j.status==='packed'?'y|✅ แพ็คเสร็จ — รอขึ้นรถ'
     : j.priority>0?'a|⚡ งานด่วน — แพ็คก่อน' : j.trip?('b|'+String(j.trip).padStart(3,'0')+'|🚚 เที่ยว '+j.trip) : 'x|📄 งานส่งตรง (PDF)';
   const today=dayKey(new Date());
-  const byDay={}; L.forEach(j=>{const d=dayKey(j.createdAt)||'0000-00-00';(byDay[d]=byDay[d]||[]).push(j);});
+  const byDay={}; L.forEach(j=>{const d=jobDay(j)||'0000-00-00';(byDay[d]=byDay[d]||[]).push(j);});
   const days=Object.keys(byDay).sort(); // เก่า → ใหม่ (งานค้างขึ้นก่อน)
   const html = days.map(d=>{
     const dj=byDay[d], pendN=dj.filter(j=>j.status==='pending').length, old = d<today && pendN>0;
     const groups={}; dj.forEach(j=>{(groups[gKey(j)]=groups[gKey(j)]||[]).push(j);});
-    const head=`<div class="dayh ${old?'old':''} ${d===today?'td':''}"><span>📅 นำเข้า ${dayLabel(d)}</span><span class="ds">${old?`⚠ ค้างแพ็ค ${pendN} งาน`:`${dj.length} งาน${pendN?` · รอแพ็ค ${pendN}`:''}`}</span></div>`;
+    const head=`<div class="dayh ${old?'old':''} ${d===today?'td':''}"><span>📅 สั่งของเข้าโกดัง ${dayLabel(d)}</span><span class="ds">${old?`⚠ ค้างแพ็ค ${pendN} งาน`:`${dj.length} งาน${pendN?` · รอแพ็ค ${pendN}`:''}`}</span></div>`;
     return head + Object.keys(groups).sort().map(k=>{
       const g=groups[k], label=k.split('|').pop();
       const doz=g.reduce((s,j)=>s+(+j.totalDoz||0),0), sk=g.reduce((s,j)=>s+(+(j.status==='pending'?estOf(j):j.packedSacks)||0),0);
@@ -474,9 +474,20 @@ function render(){
 }
 const TH_D=['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'], TH_M=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 function dayKey(x){ if(!x) return ''; const d=x instanceof Date?x:new Date(x); if(isNaN(d)) return ''; const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
+/* วันที่สั่งของเข้าโกดัง = วันที่ในเอกสาร (Excel: "18 พฤศจิกายน 2569" / PDF: "15 พ.ย. 2026") — อ่านไม่ได้ใช้วันที่นำเข้าแทน */
+const TH_MONTHS=[['มกราคม','ม.ค.'],['กุมภาพันธ์','ก.พ.'],['มีนาคม','มี.ค.'],['เมษายน','เม.ย.'],['พฤษภาคม','พ.ค.'],['มิถุนายน','มิ.ย.'],['กรกฎาคม','ก.ค.'],['สิงหาคม','ส.ค.'],['กันยายน','ก.ย.'],['ตุลาคม','ต.ค.'],['พฤศจิกายน','พ.ย.'],['ธันวาคม','ธ.ค.']];
+function parseThaiDate(str){
+  const s=String(str||'').replace(/\s+/g,' ').trim(); if(!s) return '';
+  const m=/(\d{1,2})\s*([^\d\s]+)\s*(\d{2,4})/.exec(s);
+  if(m){ const mi=TH_MONTHS.findIndex(([f,a])=>m[2]===f||m[2]===a||m[2].replace(/\./g,'')===a.replace(/\./g,''));
+    if(mi>=0){ let y=+m[3]; if(y<100) y+=2500; if(y>2400) y-=543; return dayKey(new Date(y,mi,+m[1])); } }
+  const n=/^(\d{4})-(\d{2})-(\d{2})/.exec(s); if(n) return `${n[1]}-${n[2]}-${n[3]}`;
+  return '';
+}
+function jobDay(j){ return parseThaiDate(j.docDate) || dayKey(j.createdAt); }
 function dayLabel(k){ if(k==='0000-00-00') return 'ไม่ทราบวันที่'; const [y,m,dd]=k.split('-').map(Number); const d=new Date(y,m-1,dd);
   const t=dayKey(new Date()), yd=dayKey(new Date(Date.now()-864e5));
-  return `${TH_D[d.getDay()]} ${dd} ${TH_M[m-1]} ${String(y+543).slice(2)}` + (k===t?' (วันนี้)':k===yd?' (เมื่อวาน)':''); }
+  return `${TH_D[d.getDay()]} ${dd} ${TH_M[m-1]} ${String(y+543).slice(2)}` + (k===t?' (วันนี้)':k===yd?' (เมื่อวาน)':k===dayKey(new Date(Date.now()+864e5))?' (พรุ่งนี้)':''); }
 function shortDocDate(s){ return String(s).replace('มกราคม','ม.ค.').replace('กุมภาพันธ์','ก.พ.').replace('มีนาคม','มี.ค.').replace('เมษายน','เม.ย.').replace('พฤษภาคม','พ.ค.').replace('มิถุนายน','มิ.ย.').replace('กรกฎาคม','ก.ค.').replace('สิงหาคม','ส.ค.').replace('กันยายน','ก.ย.').replace('ตุลาคม','ต.ค.').replace('พฤศจิกายน','พ.ย.').replace('ธันวาคม','ธ.ค.'); }
 /* จำนวนกระสอบโดยประมาณ = ยอดโหลทั้งหมด ÷ โหลต่อกระสอบ (ปัดขึ้น, อย่างน้อย 1) — ใช้กับทุกรุ่น */
 function estOf(j){ const doz=(+j.totalDoz||0) || (+j.totalPairs||0)/12; return doz>0 ? Math.max(1, Math.ceil(doz/(+j.packPerSack||10))) : 0; }
