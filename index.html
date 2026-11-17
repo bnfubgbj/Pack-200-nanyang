@@ -504,7 +504,7 @@ function jobCard(j, urgNo){
     j.packedAt?`แพ็คเสร็จ ${tShort(j.packedAt)} โดย ${esc(j.packedBy)}`:'', j.loadedAt?`ส่งแล้ว ${tShort(j.loadedAt)} โดย ${esc(j.loadedBy)}`:''].filter(Boolean).join(' · ');
   const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.docDate?`<span title="วันที่ในเอกสาร">🗓 ${esc(shortDocDate(j.docDate))}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:''].filter(Boolean).join('');
   const right = j.status==='pending'
-    ? `<div class="big">${fmt(j.totalDoz)}<small> โหล</small></div><div class="sm">≈${fmt(estOf(j))} กส.</div>`
+    ? `<div class="big">${fmt(estOf(j))}<small> กส.</small></div><div class="sm">${fmt(j.totalDoz)} โหล</div>`
     : `<div class="big" style="color:var(--green)">${fmt(j.packedSacks)}<small> กส.</small></div><div class="sm">${fmt(j.totalDoz)} โหล</div>`;
   return `<div class="job st-${j.status} ${urgent?'urgent':''} ${open?'open':''}">
     ${urgent?`<div class="uband">⚡ งานด่วน #${urgNo} — แพ็คก่อน <span>ติดโดย ${esc(j.priorityBy)} ${tShort(j.priorityAt)}</span></div>`:''}
