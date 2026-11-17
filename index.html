@@ -163,6 +163,18 @@ body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหน
 .nm-b{font:inherit;font-weight:600;font-size:16px;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:10px 16px;cursor:pointer}
 .nm-b.on{border-color:var(--navy2);background:var(--navy2);color:#fff}
 #mUser .modal{max-width:400px}
+.alarm{position:fixed;inset:0;background:rgba(180,83,9,.92);z-index:200;display:none;align-items:center;justify-content:center;padding:14px;animation:pulse 1s infinite alternate}
+.alarm.on{display:flex}
+@keyframes pulse{from{background:rgba(180,83,9,.92)}to{background:rgba(245,158,11,.95)}}
+.abox{background:#fff;border-radius:18px;padding:18px;width:100%;max-width:460px;max-height:90vh;overflow:auto;box-shadow:0 10px 40px #0006}
+.ahead{font-size:24px;font-weight:700;color:var(--amber);text-align:center;margin-bottom:10px}
+.aitem{border:2px solid #f59e0b;border-radius:12px;padding:10px 12px;margin-bottom:8px;background:#fffaf0}
+.aitem .an{font-weight:700;font-size:17px}.aitem .ad{font-size:13px;color:var(--mute)}
+.aitem .aq{margin:4px 0;font-size:15px}.aitem .aq b{font-size:22px;color:var(--amber)}
+.aitem .ab{font-size:12px;color:var(--mute);margin-top:4px}
+#alarmOk{width:100%;background:var(--amber);color:#fff;font-size:20px;padding:14px;margin-top:6px}
+.ahint{text-align:center;font-size:12px;color:var(--mute);margin-top:6px}
+#bellBtn.bell-on{background:#f6c34a;color:var(--navy)}
 @media print{header,.filters,.acts,.kpis,.demo,.tabs{display:none!important}.job{break-inside:avoid;border:1px solid #999}body{background:#fff}}
 </style>
 </head>
@@ -172,6 +184,7 @@ body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหน
     <div class="logo"><div class="sq">📦</div>ติดตามงานแพ็คใส่กระสอบ <span class="t2" style="font-weight:400;opacity:.7">· โกดังบางหว้า</span></div>
     <div class="sp"></div>
     <span class="sync" id="sync"></span>
+    <button class="iconbtn" id="bellBtn" onclick="toggleBell()" title="เสียงเตือนงานด่วน">🔕</button>
     <button class="iconbtn" onclick="refresh(true)" title="รีเฟรช">⟳</button>
     <button class="iconbtn" onclick="window.print()" title="พิมพ์ใบงาน">🖨</button>
     <div class="who" onclick="whoClick()"><b id="uName">-</b><span class="rolepill" id="uRole">-</span></div>
@@ -256,6 +269,12 @@ body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหน
 </div></div>
 
 <div class="toast" id="toast"></div>
+<div id="alarm" class="alarm"><div class="abox">
+  <div class="ahead">⚡ งานด่วน! แพ็คก่อน</div>
+  <div id="alarmList"></div>
+  <button class="btn" id="alarmOk" onclick="ackAlarm()">✔ รับทราบ</button>
+  <div id="alarmHint" class="ahint"></div>
+</div></div>
 
 <script>
 /* ================== CONFIG ================== */
@@ -374,6 +393,7 @@ const LS = { get:(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JS
 let USER = LS.get('pk_auth', null);   // {name, pass}
 /* สิทธิ์ติดด่วน: ใช้ค่าจาก Apps Script (ชีต Users คอลัมน์ ติดด่วนได้) ถ้ายังไม่ได้รับ ใช้ค่าเริ่มต้น ต่อ/ชัย */
 const URGENT_DEFAULT = ['ต่อ','ชัย'];
+const ALERT_DEFAULT = ['ป้อง'];   // คนที่เปิดเสียงเตือนงานด่วนให้อัตโนมัติ (เปิด/ปิดเองได้ที่ปุ่ม 🔔)
 function canUrg(){ if(!USER) return false; return typeof USER.canUrgent==='boolean' ? USER.canUrgent : URGENT_DEFAULT.includes(USER.name); }
 const DEMO_USERS = {'สุกี้':'suki_123','ชัย':'chai_123','ป้อง':'pong_123','ฟ้า':'fah_123','ต่อ':'tor_123'};
 const api = () => (LS.get('pk_api', '') || DEFAULT_API).trim();
@@ -426,6 +446,7 @@ async function refresh(manual){
     const data=(await loadJobs()).map(normJob);
     if(OPS>0 || ver!==OPVER) return;      // มีการกดระหว่างโหลด — ทิ้งข้อมูลเก่า
     JOBS = data;
+    checkUrgent();
     const d=new Date(); document.getElementById('sync').textContent = 'อัปเดต '+d.toTimeString().slice(0,5);
     render(); if(document.getElementById('pg-sum').style.display!=='none') renderSum();
     if(manual) toast('รีเฟรชแล้ว');
@@ -741,14 +762,54 @@ async function doLogin(){
   finally{ loginBtn.disabled=false; loginBtn.textContent='เข้าสู่ระบบ'; }
 }
 function logout(expired){ USER=null; try{localStorage.removeItem('pk_auth')}catch(e){} JOBS=[]; applyUser(); openUser(); if(expired) loginErr.textContent='รหัสผ่านถูกเปลี่ยน หรือหมดสิทธิ์ — กรุณาเข้าสู่ระบบใหม่'; }
-function applyUser(){ uName.textContent=USER?USER.name:'-'; uRole.textContent=USER?'ออกจากระบบ':'เข้าสู่ระบบ';
+function applyUser(){ if(window.bellBtn&&typeof drawBell==='function') try{drawBell()}catch(e){}; uName.textContent=USER?USER.name:'-'; uRole.textContent=USER?'ออกจากระบบ':'เข้าสู่ระบบ';
   demoBar.style.display=isDemo()?'':'none'; render(); }
 function whoClick(){ if(USER){ if(confirm('ออกจากระบบ?')) logout(); } else openUser(); }
 
 
 applyUser();
 if(USER) refresh(); else openUser();
-setInterval(()=>{ if(!document.hidden && !document.querySelector('.mask.on')) refresh(); }, REFRESH_SEC*1000);
+setInterval(()=>{ if(!document.hidden && !document.querySelector('.mask.on')) refresh(); }, (bellOn()?15:REFRESH_SEC)*1000);
+
+/* ================== เสียงเตือนงานด่วน (เฉพาะเครื่องที่เปิด 🔔) ================== */
+function bellOn(){ const v=LS.get('pk_bell',null); return v===null ? !!(USER && ALERT_DEFAULT.includes(USER.name)) : v; }
+function drawBell(){ bellBtn.textContent = bellOn()?'🔔':'🔕'; bellBtn.classList.toggle('bell-on',bellOn()); keepAwake(); }
+function toggleBell(){ LS.set('pk_bell',!bellOn()); unlockAudio(); drawBell();
+  if(bellOn()){ beep(1); toast('🔔 เปิดเสียงเตือนงานด่วนบนเครื่องนี้แล้ว — เปิดแอปค้างไว้ อย่าปิดจอ',4000); checkUrgent(); }
+  else toast('🔕 ปิดเสียงเตือนบนเครื่องนี้'); }
+var AC=null, ALARM_T=null, ALARM_IDS=[];
+function unlockAudio(){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); if(AC.state==='suspended') AC.resume(); }catch(e){} }
+function beep(n){ try{ unlockAudio(); if(!AC) return; const t0=AC.currentTime;
+  for(let i=0;i<(n||3);i++){ const o=AC.createOscillator(), g=AC.createGain(); o.type='square'; o.frequency.value= i%2?880:1320;
+    g.gain.setValueAtTime(0.0001,t0+i*0.35); g.gain.exponentialRampToValueAtTime(0.35,t0+i*0.35+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t0+i*0.35+0.3);
+    o.connect(g); g.connect(AC.destination); o.start(t0+i*0.35); o.stop(t0+i*0.35+0.32); } }catch(e){} }
+function urgKey(j){ return j.id+'|'+(j.priorityAt||''); }
+function checkUrgent(){
+  if(!USER || !bellOn()) return;
+  const seen=LS.get('pk_seen_urg',{});
+  const fresh=JOBS.filter(j=>j.status==='pending' && +j.priority>0 && j.priorityBy!==USER.name && !seen[urgKey(j)]).sort((a,b)=>a.priority-b.priority);
+  if(!fresh.length) return;
+  ALARM_IDS=fresh.map(urgKey);
+  alarmList.innerHTML=fresh.map(j=>`<div class="aitem"><div class="an">${esc(j.custName)}</div>
+    <div class="ad">${esc(j.docNo||'')}${j.trip?' · เที่ยว '+esc(j.trip):''}${j.sackName?' · 🏷 '+esc(j.sackName):''}</div>
+    <div class="aq"><b>${fmt(estOf(j))} กส.</b> · ${fmt(j.totalDoz)} โหล</div>
+    <div class="csum">${colorSummary(j.items||[])}</div>
+    <div class="ab">ติดด่วนโดย ${esc(j.priorityBy||'-')} ${tShort(j.priorityAt)}</div></div>`).join('');
+  document.getElementById('alarm').classList.add('on');
+  alarmHint.textContent = (AC && AC.state==='running') ? '' : 'ถ้าไม่มีเสียง: แตะที่ใดก็ได้บนหน้าจอ 1 ครั้ง';
+  clearInterval(ALARM_T); beep(4); try{navigator.vibrate&&navigator.vibrate([400,200,400,200,400])}catch(e){}
+  ALARM_T=setInterval(()=>{ beep(4); try{navigator.vibrate&&navigator.vibrate([400,200,400])}catch(e){} }, 4000);
+  document.title='⚡ งานด่วน! — ติดตามงานแพ็ค';
+}
+function ackAlarm(){ const seen=LS.get('pk_seen_urg',{}); ALARM_IDS.forEach(k=>seen[k]=1);
+  const keys=Object.keys(seen); if(keys.length>300) keys.slice(0,keys.length-300).forEach(k=>delete seen[k]);
+  LS.set('pk_seen_urg',seen); clearInterval(ALARM_T); document.getElementById('alarm').classList.remove('on');
+  document.title='ติดตามงานแพ็คใส่กระสอบ | Nanyang'; setStatus('urgent'); window.scrollTo(0,0); }
+document.addEventListener('click',()=>{ if(bellOn()) unlockAudio(); }, true);
+var WAKE=null;
+async function keepAwake(){ try{ if(bellOn() && 'wakeLock' in navigator && !WAKE && !document.hidden){ WAKE=await navigator.wakeLock.request('screen'); WAKE.addEventListener('release',()=>WAKE=null); } }catch(e){} }
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ keepAwake(); refresh(); } });
+drawBell();
 </script>
 </body>
 </html>
