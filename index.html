@@ -391,12 +391,14 @@ async function callApi(payload){
 async function loadJobs(){
   if(!USER) return [];
   if(isDemo()) return LS.get('pk_demo_jobs', []);
-  return (await callApi({action:'list'})).jobs;
+  const r=await callApi({action:'list'});
+  if(USER && typeof r.canUrgent==='boolean' && USER.canUrgent!==r.canUrgent){ USER.canUrgent=r.canUrgent; LS.set('pk_auth',USER); }
+  return r.jobs;
 }
 function nowIso(){const d=new Date();const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;}
 function demoApi(p){
   if(p.action==='users') return {ok:true,users:Object.keys(DEMO_USERS)};
-  if(p.action==='login'){ if(DEMO_USERS[p.user]===p.pass) return {ok:true,user:p.user}; throw new Error('ชื่อหรือรหัสผ่านไม่ถูกต้อง'); }
+  if(p.action==='login'){ if(DEMO_USERS[p.user]===p.pass) return {ok:true,user:p.user,canUrgent:['ต่อ','ชัย'].includes(p.user)}; throw new Error('ชื่อหรือรหัสผ่านไม่ถูกต้อง'); }
   let jobs = LS.get('pk_demo_jobs', []); const u = USER?USER.name:'-'; const f = id => jobs.find(j=>j.id===id);
   let line = '';
   if(p.action==='addJobs'){ let a=0,s=0; p.jobs.forEach(j=>{ if(f(j.id)){s++;return;} jobs.push(Object.assign({},j,{status:'pending',priority:0,createdBy:u,createdAt:nowIso()})); a++; });
@@ -515,7 +517,7 @@ function jobCard(j, urgNo){
   const id = esc(j.id);
   let acts='', quick='';
   if(j.status==='pending'){
-    quick=`<button class="qb ${j.priority>0?'q-urg-on':'q-urg'}" onclick="event.stopPropagation();urg('${id}',${j.priority>0?'false':'true'})">${j.priority>0?'⚡ ด่วน ✓':'⚡ ด่วน'}</button><button class="qb q-pack" onclick="event.stopPropagation();openPack('${id}')">✅ แพ็คเสร็จ</button>`;
+    quick=(USER&&USER.canUrgent?`<button class="qb ${j.priority>0?'q-urg-on':'q-urg'}" onclick="event.stopPropagation();urg('${id}',${j.priority>0?'false':'true'})">${j.priority>0?'⚡ ด่วน ✓':'⚡ ด่วน'}</button>`:'')+`<button class="qb q-pack" onclick="event.stopPropagation();openPack('${id}')">✅ แพ็คเสร็จ</button>`;
   } else if(j.status==='packed'){
     quick=`<button class="qb q-load" onclick="event.stopPropagation();loadOne('${id}')">🚚 ขึ้นรถ/ส่งแล้ว</button>`;
     acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “แพ็คเสร็จ” กลับเป็นรอแพ็ค?')">↩ ยกเลิกแพ็คเสร็จ</button>`;
@@ -598,6 +600,7 @@ async function quick(id, mut, payload, okMsg){
 function openUrg(id){ CUR=JOBS.find(j=>j.id===id); urSub.textContent=`${CUR.custName} · ${CUR.docNo||''} · ${fmt(CUR.totalDoz)} โหล`; urNote.value=''; openM('mUrg'); }
 async function confirmUrg(){ await run(urOk, ()=>callApi({action:'setPriority',id:CUR.id,on:true,note:urNote.value.trim()}), 'แจ้งทีมแพ็คให้เร่งแล้ว'); closeM('mUrg'); }
 function urg(id,on){
+  if(!(USER&&USER.canUrgent)) return toast('⚠ เฉพาะ ต่อ และ ชัย เท่านั้นที่ติดงานด่วนได้');
   quick(id, j=>{ if(on) Object.assign(j,{priority:Math.max(0,...JOBS.map(x=>+x.priority||0))+1,priorityBy:USER?USER.name:'-',priorityAt:nowIso()}); else Object.assign(j,{priority:0,priorityBy:'',priorityAt:''}); },
     {action:'setPriority',id,on}, on?'⚡ ติดงานด่วนแล้ว':'ยกเลิกด่วนแล้ว'); }
 async function unUrg(id){ await run(null, ()=>callApi({action:'setPriority',id,on:false}), 'ยกเลิกด่วนแล้ว'); }
@@ -729,7 +732,7 @@ async function doLogin(){
   if(!name) return loginErr.textContent='กรุณาเลือกชื่อ';
   if(!pass) return loginErr.textContent='กรุณาใส่รหัสผ่าน';
   loginBtn.disabled=true; loginBtn.textContent='กำลังตรวจสอบ…';
-  try{ await callApi({action:'login',user:name.trim(),pass}); USER={name:name.trim(),pass}; LS.set('pk_auth',USER);
+  try{ const r=await callApi({action:'login',user:name.trim(),pass}); USER={name:name.trim(),pass,canUrgent:!!r.canUrgent}; LS.set('pk_auth',USER);
        closeM('mUser'); applyUser(); refresh(); toast('👋 สวัสดี '+USER.name); }
   catch(e){ loginErr.textContent='❌ '+e.message; }
   finally{ loginBtn.disabled=false; loginBtn.textContent='เข้าสู่ระบบ'; }
