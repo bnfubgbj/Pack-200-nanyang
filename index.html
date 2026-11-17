@@ -158,6 +158,7 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .job.st-loaded{opacity:.6;border-left-color:#9ca3af!important}
 .grp .bulk{margin-left:8px;padding:5px 10px;font-size:12px}
 .kpi.k4 .v{color:#555}
+body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหนก็ได้ เพื่อนำเข้า';position:fixed;inset:10px;border:4px dashed var(--navy2);border-radius:20px;background:#e8f0fecc;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:var(--navy);z-index:100;pointer-events:none}
 @media print{header,.filters,.acts,.kpis,.demo,.tabs{display:none!important}.job{break-inside:avoid;border:1px solid #999}body{background:#fff}}
 </style>
 </head>
@@ -596,7 +597,17 @@ async function run(btn, fn, okMsg){
 const drop=document.getElementById('drop');
 ['dragenter','dragover'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('hov')}));
 ['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('hov')}));
-drop.addEventListener('drop',ev=>handleFiles(ev.dataTransfer.files));
+drop.addEventListener('drop',ev=>{ev.stopPropagation();dropAny(ev);});
+/* วางไฟล์ได้ทั้งหน้า — ไม่ต้องเปิดแท็บนำเข้าก่อน */
+window.addEventListener('dragover',ev=>{ev.preventDefault(); document.body.classList.add('dragging');});
+window.addEventListener('dragleave',ev=>{ if(!ev.relatedTarget) document.body.classList.remove('dragging'); });
+window.addEventListener('drop',ev=>{ev.preventDefault(); dropAny(ev);});
+function dropAny(ev){
+  document.body.classList.remove('dragging');
+  const files=[...(ev.dataTransfer.files||[])].filter(f=>/\.(xlsx|xls|xlsm|pdf)$/i.test(f.name));
+  if(files.length){ showTab('import'); handleFiles(files); return; }
+  toast('⚠ ลากจากอีเมลตรงๆ ไม่ได้ — กด Download ไฟล์ในอีเมลก่อน แล้วลากจากแถบดาวน์โหลด (Ctrl+J) มาวางแทน',6000);
+}
 
 async function handleFiles(fl){
   const files=[...fl]; const out=[]; const errs=[];
