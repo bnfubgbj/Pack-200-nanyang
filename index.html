@@ -425,7 +425,7 @@ function render(){
   const pend = JOBS.filter(j=>j.status==='pending'), urg = pend.filter(j=>j.priority>0),
         pk = JOBS.filter(j=>j.status==='packed'), ld = JOBS.filter(j=>j.status==='loaded'&&isToday(j.loadedAt));
   const sum = (a,k)=>a.reduce((s,j)=>s+(+j[k]||0),0);
-  kP.textContent=pend.length; kPs.textContent=fmt(sum(pend,'totalDoz'))+' โหล · ≈'+fmt(sum(pend,'estSacks'))+' กส.';
+  kP.textContent=pend.length; kPs.textContent=fmt(sum(pend,'totalDoz'))+' โหล · ≈'+fmt(pend.reduce((s,j)=>s+estOf(j),0))+' กส.';
   kU.textContent=urg.length; kK.textContent=pk.length; kKs.textContent=fmt(sum(pk,'packedSacks'))+' กส.';
   kL.textContent=ld.length; kLs.textContent=fmt(sum(ld,'packedSacks'))+' กส.';
   document.querySelectorAll('.kpi').forEach(k=>k.classList.toggle('sel',k.dataset.f===STATUS));
@@ -463,7 +463,7 @@ function render(){
     const head=`<div class="dayh ${old?'old':''} ${d===today?'td':''}"><span>📅 นำเข้า ${dayLabel(d)}</span><span class="ds">${old?`⚠ ค้างแพ็ค ${pendN} งาน`:`${dj.length} งาน${pendN?` · รอแพ็ค ${pendN}`:''}`}</span></div>`;
     return head + Object.keys(groups).sort().map(k=>{
       const g=groups[k], label=k.split('|').pop();
-      const doz=g.reduce((s,j)=>s+(+j.totalDoz||0),0), sk=g.reduce((s,j)=>s+(+(j.status==='pending'?j.estSacks:j.packedSacks)||0),0);
+      const doz=g.reduce((s,j)=>s+(+j.totalDoz||0),0), sk=g.reduce((s,j)=>s+(+(j.status==='pending'?estOf(j):j.packedSacks)||0),0);
       const bulk = k.startsWith('y|') && g.length>1 ? `<button class="qb q-load bulk" onclick="loadAll('${g.map(j=>esc(j.id)).join(',')}')">🚚 ส่งแล้วทั้งหมด ${g.length} งาน</button>` : '';
       return `<div class="grp"><span>${esc(label)}</span><span class="gs">${g.length} งาน · ${fmt(doz)} โหล · ${j0(g)?'≈':''}${fmt(sk)} กส. ${bulk}</span></div>`+g.map(j=>jobCard(j,urgRank[j.id])).join('');
     }).join('');
@@ -477,6 +477,8 @@ function dayLabel(k){ if(k==='0000-00-00') return 'ไม่ทราบวั�
   const t=dayKey(new Date()), yd=dayKey(new Date(Date.now()-864e5));
   return `${TH_D[d.getDay()]} ${dd} ${TH_M[m-1]} ${String(y+543).slice(2)}` + (k===t?' (วันนี้)':k===yd?' (เมื่อวาน)':''); }
 function shortDocDate(s){ return String(s).replace('มกราคม','ม.ค.').replace('กุมภาพันธ์','ก.พ.').replace('มีนาคม','มี.ค.').replace('เมษายน','เม.ย.').replace('พฤษภาคม','พ.ค.').replace('มิถุนายน','มิ.ย.').replace('กรกฎาคม','ก.ค.').replace('สิงหาคม','ส.ค.').replace('กันยายน','ก.ย.').replace('ตุลาคม','ต.ค.').replace('พฤศจิกายน','พ.ย.').replace('ธันวาคม','ธ.ค.'); }
+/* จำนวนกระสอบโดยประมาณ = ยอดโหลทั้งหมด ÷ โหลต่อกระสอบ (ปัดขึ้น, อย่างน้อย 1) — ใช้กับทุกรุ่น */
+function estOf(j){ const doz=(+j.totalDoz||0) || (+j.totalPairs||0)/12; return doz>0 ? Math.max(1, Math.ceil(doz/(+j.packPerSack||10))) : 0; }
 function j0(g){ return g.some(j=>j.status==='pending'); }
 
 function colorSummary(items){
@@ -502,7 +504,7 @@ function jobCard(j, urgNo){
     j.packedAt?`แพ็คเสร็จ ${tShort(j.packedAt)} โดย ${esc(j.packedBy)}`:'', j.loadedAt?`ส่งแล้ว ${tShort(j.loadedAt)} โดย ${esc(j.loadedBy)}`:''].filter(Boolean).join(' · ');
   const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.docDate?`<span title="วันที่ในเอกสาร">🗓 ${esc(shortDocDate(j.docDate))}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:''].filter(Boolean).join('');
   const right = j.status==='pending'
-    ? `<div class="big">${fmt(j.totalDoz)}<small> โหล</small></div><div class="sm">${j.estSacks?`≈${fmt(j.estSacks)} กส.`:fmt(j.totalPairs)+' คู่'}</div>`
+    ? `<div class="big">${fmt(j.totalDoz)}<small> โหล</small></div><div class="sm">≈${fmt(estOf(j))} กส.</div>`
     : `<div class="big" style="color:var(--green)">${fmt(j.packedSacks)}<small> กส.</small></div><div class="sm">${fmt(j.totalDoz)} โหล</div>`;
   return `<div class="job st-${j.status} ${urgent?'urgent':''} ${open?'open':''}">
     ${urgent?`<div class="uband">⚡ งานด่วน #${urgNo} — แพ็คก่อน <span>ติดโดย ${esc(j.priorityBy)} ${tShort(j.priorityAt)}</span></div>`:''}
@@ -553,7 +555,7 @@ function matrix(items){
 /* ================== ACTIONS ================== */
 let CUR=null;
 function openPack(id){ CUR=JOBS.find(j=>j.id===id); pkSub.textContent=`${CUR.custName} · ${CUR.docNo||''}${CUR.sackName?' · กระสอบ “'+CUR.sackName+'”':''}`;
-  pkN.value = CUR.estSacks||''; pkHint.textContent = CUR.estSacks?`ประมาณการจากยอด ${fmt(CUR.totalDoz)} โหล ÷ ${CUR.packPerSack||10} โหล/กส. = ${CUR.estSacks} กส. (แก้ได้)`:'กรอกจำนวนกระสอบจริง'; pkNote.value=''; openM('mPack'); setTimeout(()=>pkN.select(),50); }
+  const est=estOf(CUR); pkN.value = est; pkHint.textContent = `คำนวณจาก ${fmt(CUR.totalDoz)} โหล ÷ ${CUR.packPerSack||10} โหล/กส. = ${est} กส. — ถ้าแพ็คได้ไม่ตรง กด − / + หรือพิมพ์แก้ได้`; pkNote.value=''; openM('mPack'); setTimeout(()=>pkN.select(),50); }
 function stepS(d){ pkN.value=Math.max(0,(+pkN.value||0)+d); }
 async function confirmPack(){ const n=+pkN.value; if(!(n>0)) return toast('กรุณากรอกจำนวนกระสอบ');
   const note=pkNote.value.trim(), id=CUR.id; closeM('mPack');
@@ -637,7 +639,7 @@ function finalize(j){
   j.totalPairs=j.items.reduce((s,i)=>s+(+i.qty||0),0);
   const foamPairs=j.items.filter(i=>i.cat==='ฟองน้ำ'||/^ฟองน้ำ/.test(i.model)).reduce((s,i)=>s+(+i.qty||0),0);
   j.totalDoz=Math.round(j.totalPairs/12*10)/10;
-  j.estSacks=foamPairs?Math.ceil(foamPairs/12/(j.packPerSack||10)):0;
+  j.estSacks=estOf(j);
   return j;
 }
 function renderPreview(errs){
