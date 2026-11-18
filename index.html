@@ -175,6 +175,20 @@ body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหน
 #alarmOk{width:100%;background:var(--amber);color:#fff;font-size:20px;padding:14px;margin-top:6px}
 .ahint{text-align:center;font-size:12px;color:var(--mute);margin-top:6px}
 #bellBtn.bell-on{background:#f6c34a;color:var(--navy)}
+.rep-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}
+.rep-title{font-weight:700;font-size:16px;margin-bottom:8px;color:var(--navy)}
+table.rep td{white-space:nowrap}
+.carr{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.cchip{font:inherit;font-size:13px;border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;cursor:pointer}
+.cchip.on{background:var(--navy2);border-color:var(--navy2);color:#fff}
+.lnk{font:inherit;font-size:12.5px;border:0;background:none;color:var(--navy2);cursor:pointer;white-space:nowrap}
+table.rep tr.man td{background:#fbfaf6}
+.tag{display:inline-block;font-size:11.5px;font-weight:600;border-radius:6px;padding:1px 7px;margin:1px 0}
+.t-ok{background:var(--green-bg);color:var(--green)}.t-warn{background:var(--amber-bg);color:#92400e}.t-info{background:var(--blue-bg);color:var(--blue)}.t-grey{background:#f1efe9;color:#6b6457}
+.sum-line{font-size:13.5px;margin-bottom:6px}
+.kpi.warn{outline:2px solid var(--red)}
+table.rep select{font:inherit;font-size:12.5px;max-width:340px;margin-top:3px}
+@media print{.noprint{display:none}}
 @media print{header,.filters,.acts,.kpis,.demo,.tabs{display:none!important}.job{break-inside:avoid;border:1px solid #999}body{background:#fff}}
 </style>
 </head>
@@ -193,6 +207,7 @@ body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหน
     <button class="tab on" data-tab="list" onclick="showTab('list')">📋 งานแพ็ค</button>
     <button class="tab" data-tab="import" id="tabImport" onclick="showTab('import')">📥 นำเข้าไฟล์</button>
     <button class="tab" data-tab="sum" onclick="showTab('sum')">∑ ยอดรวมรอแพ็ค</button>
+    <button class="tab" data-tab="rep" onclick="showTab('rep')">📄 รายงานส่งของ</button>
   </div>
 </header>
 
@@ -205,7 +220,7 @@ body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหน
       <div class="kpi k1" data-f="pending" onclick="setStatus('pending')"><div class="l">📦 รอแพ็ค</div><div class="v" id="kP">0</div><div class="s" id="kPs">-</div></div>
       <div class="kpi k2" data-f="urgent" onclick="setStatus('urgent')"><div class="l">⚡ งานด่วน</div><div class="v" id="kU">0</div><div class="s">รอแพ็ค</div></div>
       <div class="kpi k3" data-f="packed" onclick="setStatus('packed')"><div class="l">✅ แพ็คเสร็จ รอส่ง</div><div class="v" id="kK">0</div><div class="s" id="kKs">-</div></div>
-      <div class="kpi k4" data-f="loaded" onclick="setStatus('loaded')"><div class="l">🚚 ส่งแล้ว (วันนี้)</div><div class="v" id="kL">0</div><div class="s" id="kLs">-</div></div>
+      <div class="kpi k4" data-f="loaded" onclick="setStatus('loaded')"><div class="l">🚚 จัดรถแล้ว รอยืนยันส่ง</div><div class="v" id="kL">0</div><div class="s" id="kLs">-</div></div>
     </div>
     <div class="filters">
       <button class="chip" data-s="active" onclick="setStatus('active')">ล่าสุด</button>
@@ -227,7 +242,7 @@ body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหน
       <div class="ic">📂</div>
       <h3>ลากไฟล์มาวาง หรือแตะเพื่อเลือกไฟล์</h3>
       <p>Excel ใบเบิกเอเยนต์ (ชีต “ใบยาว”) · PDF ใบส่งสินค้า IFO งานส่งตรง · เลือกได้หลายไฟล์พร้อมกัน</p>
-      <input type="file" id="fileIn" multiple accept=".xlsx,.xls,.xlsm,.pdf" style="display:none" onchange="handleFiles(this.files);this.value=''">
+      <input type="file" id="fileIn" multiple accept=".xlsx,.xls,.xlsm,.pdf" style="display:none" onchange="routeFiles([...this.files]);this.value=''">
     </div>
     <div class="prev" id="prev"></div>
   </section>
@@ -236,6 +251,26 @@ body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหน
   <section id="pg-sum" style="display:none">
     <div class="note" style="margin-bottom:10px">ยอดรวมทุกงานที่ <b>ยังรอแพ็ค</b> แยกตามรุ่น/สี/เบอร์ (หน่วย: คู่) — ใช้ดูว่าต้องเตรียมของจากคลังเท่าไหร่</div>
     <div id="sumBody"></div>
+  </section>
+
+  <!-- REPORT -->
+  <section id="pg-rep" style="display:none">
+    <div class="drop" id="repDrop" onclick="repFile.click()" style="padding:22px 16px">
+      <div class="ic" style="font-size:32px">🚚</div>
+      <h3>ลากไฟล์ “รายงานการส่งสินค้าประจำวัน” มาวาง (Excel ที่ส่ง Teams)</h3>
+      <p>ฉบับส่งตรง และ/หรือ ฉบับเอเยนต์ — วางพร้อมกันได้ · ระบบจะเทียบกับงานที่ “จัดรถแล้ว” แล้วยืนยันว่าส่งจริงกับขนส่งไหน</p>
+      <input type="file" id="repFile" multiple accept=".xlsx,.xls" style="display:none" onchange="handleReportFiles(this.files);this.value=''">
+    </div>
+    <div id="recon"></div>
+    <div class="filters" style="margin-top:14px">
+      <label style="font-weight:600">ดูรายงานวันที่</label>
+      <input type="date" id="rDate" style="flex:0;min-width:160px" onchange="loadReport()">
+      <select id="rSrc" onchange="drawReport()"><option value="">ทุกประเภท</option><option value="PDF">ส่งตรง</option><option value="EXCEL">เอเยนต์</option></select>
+      <button class="btn btn-load" onclick="exportReport()">⬇ ดาวน์โหลด Excel</button>
+      <button class="btn btn-ghost" onclick="copyReport()">📋 คัดลอก</button>
+    </div>
+    <div class="rep-card"><div id="repTitle" class="rep-title"></div><div id="repBody"></div></div>
+    <div id="waitBox"></div>
   </section>
 </main>
 
@@ -258,8 +293,29 @@ body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหน
   <label>จำนวนกระสอบที่แพ็คได้จริง</label>
   <div class="stepper"><button onclick="stepS(-1)">−</button><input id="pkN" class="bigin" type="number" inputmode="numeric" min="0"><button onclick="stepS(1)">+</button></div>
   <div style="font-size:12.5px;color:var(--mute);margin-top:6px" id="pkHint"></div>
+  <label>จำนวนกล่อง (ถ้ามี)</label>
+  <div class="stepper"><button onclick="stepB(-1)">−</button><input id="pkB" class="bigin" type="number" inputmode="numeric" min="0" value="0"><button onclick="stepB(1)">+</button></div>
   <label>หมายเหตุ (ถ้ามี)</label><input id="pkNote" placeholder="เช่น ขาดเบอร์ 9 สีแดง 1 โหล">
   <div class="mact"><button class="btn btn-ghost" onclick="closeM('mPack')">ยกเลิก</button><button class="btn btn-pack" id="pkOk" onclick="confirmPack()">ยืนยันแพ็คเสร็จ</button></div>
+</div></div>
+
+<div class="mask" id="mShip"><div class="modal">
+  <h3 id="shTitle">🚚 ขึ้นรถ / ส่งแล้ว</h3><div class="sub" id="shSub"></div>
+  <label>ส่งกับขนส่งไหน?</label>
+  <div class="carr" id="shChips"></div>
+  <input id="shCarrier" list="carrList" placeholder="หรือพิมพ์ชื่อขนส่ง + เบอร์โทร เช่น นำโชคประเสริฐ Tel: 081-8576661">
+  <div class="mact"><button class="btn btn-ghost" onclick="closeM('mShip')">ยกเลิก</button><button class="btn btn-load" id="shOk" onclick="confirmShip()">ยืนยัน</button></div>
+</div></div>
+<datalist id="carrList"></datalist>
+
+<div class="mask" id="mManual"><div class="modal">
+  <h3>➕ เพิ่มรายการส่งของ (ไม่อยู่ในแอป)</h3><div class="sub">เช่น เอกสาร II / EX / SI ที่ไม่ได้ผ่านทีมแพ็คในแอป</div>
+  <label>ประเภทรายงาน</label><select id="mnSrc"><option value="PDF">ส่งตรง</option><option value="EXCEL">เอเยนต์</option></select>
+  <label>Invoice No</label><input id="mnDoc" placeholder="เช่น II691112-003">
+  <label>Customer / Description</label><input id="mnCust" placeholder="เช่น บริษัท บิ๊กซีซูเปอร์เซ็นเตอร์ จำกัด (มหาชน)">
+  <label>Logistics Provider</label><input id="mnCarr" list="carrList" value="บริษัทส่งเอง">
+  <div style="display:flex;gap:10px"><div style="flex:1"><label>กล่อง</label><input id="mnBox" type="number" inputmode="numeric" min="0"></div><div style="flex:1"><label>กระสอบ</label><input id="mnSack" type="number" inputmode="numeric" min="0"></div></div>
+  <div class="mact"><button class="btn btn-ghost" onclick="closeM('mManual')">ยกเลิก</button><button class="btn btn-load" id="mnOk" onclick="saveManual()">บันทึก</button></div>
 </div></div>
 
 <div class="mask" id="mUrg"><div class="modal">
@@ -329,6 +385,7 @@ function parsePdfPages(pages,fileName){
       if(!d.ref){const m=/อ้างอิง\s*:\s*([A-Z]{2}[\w\-]+)/.exec(t); if(m) d.ref=m[1];}
       if(!d.remark && /^หมายเหตุ/.test(t)) d.remark=t.replace(/^หมายเหตุ\s*:\s*/,'').replace(/\*+/g,' ').trim();
       if(!d.province){const m=/จ\.\s*([ก-๙]{3,})/.exec(t); if(m && !/นันยาง/.test(t)) d.province=m[1];}
+      if(!d.shipTo && /^สถาน\S*ส่งของ/.test(t)){ const v=t.split(':').slice(1).join(':').trim(); if(v) d.shipTo=v; }
     }
     // items
     for(let i=0;i<L.length;i++){
@@ -345,7 +402,7 @@ function parsePdfPages(pages,fileName){
   }
   return order.map(k=>{const d=docs[k];const items=Object.values(d.lines).sort((a,b)=>a.no-b.no);
     return {id:d.docNo,source:'PDF',docNo:d.docNo,ref:d.ref,custCode:d.custCode,custName:d.custName,docDate:d.date,trip:'',sackName:'',
-      transport:d.province?('จ.'+d.province):'',note:d.remark,packPerSack:10,items:items.map(x=>({model:x.model,cat:x.cat,color:x.color,size:x.size,qty:x.qty,code:x.code}))};});
+      transport:d.shipTo||(d.province?('จ.'+d.province):''),note:d.remark,packPerSack:10,items:items.map(x=>({model:x.model,cat:x.cat,color:x.color,size:x.size,qty:x.qty,code:x.code}))};});
 }
 
 /* ---- Excel ใบเบิก (sheet "ใบยาว") : input = array of rows (arrays) ---- */
@@ -426,11 +483,20 @@ function demoApi(p){
   let line = '';
   if(p.action==='addJobs'){ let a=0,s=0; p.jobs.forEach(j=>{ if(f(j.id)){s++;return;} jobs.push(Object.assign({},j,{status:'pending',priority:0,createdBy:u,createdAt:nowIso()})); a++; });
     line = a?`📥 แจ้งกลุ่มทีมแพ็ค: งานใหม่ ${a} งาน`:''; LS.set('pk_demo_jobs',jobs); demoLine(line); return {ok:true,added:a,skipped:s}; }
+  if(p.action==='report') return {ok:true,rows:LS.get('pk_demo_rep',[]).filter(r=>r.date===p.date)};
+  if(p.action==='importShipReport'){ let R=LS.get('pk_demo_rep',[]).filter(r=>!(r.date===p.date&&r.source===p.source)); R=R.concat(p.rows.map(r=>Object.assign({date:p.date,source:p.source},r))); LS.set('pk_demo_rep',R);
+    let up=0; const by={}; p.rows.filter(r=>r.jobId).forEach(r=>(by[r.jobId]=by[r.jobId]||[]).push(r));
+    Object.keys(by).forEach(id=>{ const j=f(id); if(!j) return; const rs=by[id]; Object.assign(j,{shippedAt:p.date,carrier:[...new Set(rs.map(r=>r.carrier))].join(' / '),shipDoc:[...new Set(rs.map(r=>r.docNo))].join(', '),priority:0});
+      if(j.status!=='loaded') Object.assign(j,{status:'loaded',loadedBy:u,loadedAt:p.date+'T17:00:00'}); up++; });
+    LS.set('pk_demo_jobs',jobs); return {ok:true,updated:up}; }
+  if(p.action==='addManual'){ const m=LS.get('pk_demo_man',[]); const mid='M'+Date.now(); m.push(Object.assign({mid},p.row)); LS.set('pk_demo_man',m); return {ok:true,mid}; }
+  if(p.action==='deleteManual'){ LS.set('pk_demo_man',LS.get('pk_demo_man',[]).filter(r=>r.mid!==p.mid)); return {ok:true}; }
   const j = f(p.id); if(!j) throw new Error('ไม่พบงาน');
-  if(p.action==='setPacked'){ Object.assign(j,{status:'packed',packedSacks:+p.sacks||0,packNote:p.note||'',packedBy:u,packedAt:nowIso()}); line=`✅ แจ้งกลุ่มฝ่ายจัดรถ: ${j.custName} แพ็คเสร็จ ${j.packedSacks} กส.`; }
+  if(p.action==='setPacked'){ Object.assign(j,{status:'packed',packedSacks:+p.sacks||0,packedBoxes:+p.boxes||0,packNote:p.note||'',packedBy:u,packedAt:nowIso()}); line=`✅ แจ้งกลุ่มฝ่ายจัดรถ: ${j.custName} แพ็คเสร็จ ${j.packedSacks} กส.`; }
   if(p.action==='setPriority'){ if(p.on){ Object.assign(j,{priority:Math.max(0,...jobs.map(x=>+x.priority||0))+1,priorityNote:p.note||'',priorityBy:u,priorityAt:nowIso()}); line=`⚡ แจ้งกลุ่มทีมแพ็ค: เร่ง ${j.custName}`; } else Object.assign(j,{priority:0,priorityNote:'',priorityBy:'',priorityAt:''}); }
-  if(p.action==='setLoaded'){ if(j.status!=='packed') throw new Error('ต้องแพ็คเสร็จก่อน'); Object.assign(j,{status:'loaded',loadedBy:u,loadedAt:nowIso(),priority:0}); }
-  if(p.action==='undo'){ if(j.status==='loaded') Object.assign(j,{status:'packed',loadedBy:'',loadedAt:''}); else if(j.status==='packed') Object.assign(j,{status:'pending',packedSacks:'',packNote:'',packedBy:'',packedAt:''}); }
+  if(p.action==='setLoaded'){ if(j.status!=='packed') throw new Error('ต้องแพ็คเสร็จก่อน'); Object.assign(j,{status:'loaded',loadedBy:u,loadedAt:nowIso(),priority:0,carrier:p.carrier||'บริษัทส่งเอง'}); }
+  if(p.action==='setCarrier'){ j.carrier=p.carrier; }
+  if(p.action==='undo'){ if(j.status==='loaded') Object.assign(j,{status:'packed',loadedBy:'',loadedAt:''}); else if(j.status==='packed') Object.assign(j,{status:'pending',packedSacks:'',packedBoxes:'',packNote:'',packedBy:'',packedAt:''}); }
   if(p.action==='deleteJob'){ jobs = jobs.filter(x=>x.id!==p.id); }
   LS.set('pk_demo_jobs',jobs); demoLine(line); return {ok:true};
 }
@@ -461,11 +527,13 @@ function setStatus(s){ STATUS = s; render(); }
 
 function render(){
   const pend = JOBS.filter(j=>j.status==='pending'), urg = pend.filter(j=>j.priority>0),
-        pk = JOBS.filter(j=>j.status==='packed'), ld = JOBS.filter(j=>j.status==='loaded'&&isToday(j.loadedAt));
+        pk = JOBS.filter(j=>j.status==='packed'), ld = JOBS.filter(j=>j.status==='loaded'&&!j.shippedAt);
   const sum = (a,k)=>a.reduce((s,j)=>s+(+j[k]||0),0);
   kP.textContent=pend.length; kPs.textContent=fmt(sum(pend,'totalDoz'))+' โหล · ≈'+fmt(pend.reduce((s,j)=>s+estOf(j),0))+' กส.';
   kU.textContent=urg.length; kK.textContent=pk.length; kKs.textContent=fmt(sum(pk,'packedSacks'))+' กส.';
-  kL.textContent=ld.length; kLs.textContent=fmt(sum(ld,'packedSacks'))+' กส.';
+  kL.textContent=ld.length; const oldL=ld.filter(j=>dayKey(j.loadedAt)<dayKey(new Date())).length;
+  kLs.innerHTML= oldL?`<b style="color:var(--red)">⚠ ค้างข้ามวัน ${oldL} งาน</b>`:'ยืนยันด้วยรายงานตอนเย็น';
+  document.querySelector('.kpi.k4').classList.toggle('warn',oldL>0);
   document.querySelectorAll('.kpi').forEach(k=>k.classList.toggle('sel',k.dataset.f===STATUS));
   document.querySelectorAll('.chip[data-s]').forEach(c=>c.classList.toggle('on',c.dataset.s===STATUS));
   // trips
@@ -490,7 +558,7 @@ function render(){
   L.sort((a,b)=> rank(a)-rank(b) || (rank(a)===0? a.priority-b.priority:0) || String(a.trip||99).localeCompare(String(b.trip||99),undefined,{numeric:true}) || String(a.createdAt).localeCompare(String(b.createdAt)));
   const urgRank = {}; pend.filter(j=>j.priority>0).sort((a,b)=>a.priority-b.priority).forEach((j,i)=>urgRank[j.id]=i+1);
   // ---- group: ด่วน / เที่ยว / ส่งตรง / แพ็คเสร็จ / ขึ้นรถแล้ว ----
-  const gKey = j => j.status==='loaded'?'z|🚚 ส่งแล้ว' : j.status==='packed'?'y|✅ แพ็คเสร็จ — รอขึ้นรถ'
+  const gKey = j => j.status==='loaded'?(j.shippedAt?'z2|✅ ส่งแล้ว (ยืนยันจากรายงาน)':'z1|🚚 จัดรถแล้ว — รอยืนยันส่ง') : j.status==='packed'?'y|✅ แพ็คเสร็จ — รอขึ้นรถ'
     : j.priority>0?'a|⚡ งานด่วน — แพ็คก่อน' : j.trip?('b|'+String(j.trip).padStart(3,'0')+'|🚚 เที่ยว '+j.trip) : 'x|📄 งานส่งตรง (PDF)';
   const today=dayKey(new Date());
   const byDay={}; L.forEach(j=>{const d=jobDay(j)||'0000-00-00';(byDay[d]=byDay[d]||[]).push(j);});
@@ -502,7 +570,7 @@ function render(){
     return head + Object.keys(groups).sort().map(k=>{
       const g=groups[k], label=k.split('|').pop();
       const doz=g.reduce((s,j)=>s+(+j.totalDoz||0),0), sk=g.reduce((s,j)=>s+(+(j.status==='pending'?estOf(j):j.packedSacks)||0),0);
-      const bulk = k.startsWith('y|') && g.length>1 ? `<button class="qb q-load bulk" onclick="loadAll('${g.map(j=>esc(j.id)).join(',')}')">🚚 ส่งแล้วทั้งหมด ${g.length} งาน</button>` : '';
+      const bulk = k.startsWith('y|') && g.length>1 ? `<button class="qb q-load bulk" onclick="loadAll('${g.map(j=>esc(j.id)).join(',')}')">🚚 จัดรถแล้วทั้งหมด ${g.length} งาน</button>` : '';
       return `<div class="grp"><span>${esc(label)}</span><span class="gs">${g.length} งาน · ${fmt(doz)} โหล · ${j0(g)?'≈':''}${fmt(sk)} กส. ${bulk}</span></div>`+g.map(j=>jobCard(j,urgRank[j.id])).join('');
     }).join('');
   }).join('');
@@ -543,18 +611,18 @@ function jobCard(j, urgNo){
   if(j.status==='pending'){
     quick=(canUrg()?`<button class="qb ${j.priority>0?'q-urg-on':'q-urg'}" onclick="event.stopPropagation();urg('${id}',${j.priority>0?'false':'true'})">${j.priority>0?'⚡ ด่วน ✓':'⚡ ด่วน'}</button>`:'')+`<button class="qb q-pack" onclick="event.stopPropagation();openPack('${id}')">✅ แพ็คเสร็จ</button>`;
   } else if(j.status==='packed'){
-    quick=`<button class="qb q-load" onclick="event.stopPropagation();loadOne('${id}')">🚚 ขึ้นรถ/ส่งแล้ว</button>`;
+    quick=`<button class="qb q-load" onclick="event.stopPropagation();loadOne('${id}')">🚚 จัดรถแล้ว</button>`;
     acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “แพ็คเสร็จ” กลับเป็นรอแพ็ค?')">↩ ยกเลิกแพ็คเสร็จ</button>`;
   } else {
-    acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “ส่งแล้ว” กลับเป็นแพ็คเสร็จ?')">↩ ยกเลิกส่งแล้ว</button>`;
+    acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “จัดรถแล้ว” กลับเป็นแพ็คเสร็จ?')">↩ ยกเลิกจัดรถ</button>`;
   }
   acts+=`<button class="btn btn-del" onclick="act('deleteJob','${id}','ลบงานนี้ออกจากระบบ?')">🗑 ลบงาน</button>`;
   const meta=[ j.createdAt?`นำเข้า ${tShort(j.createdAt)} โดย ${esc(j.createdBy)}`:'',
-    j.packedAt?`แพ็คเสร็จ ${tShort(j.packedAt)} โดย ${esc(j.packedBy)}`:'', j.loadedAt?`ส่งแล้ว ${tShort(j.loadedAt)} โดย ${esc(j.loadedBy)}`:''].filter(Boolean).join(' · ');
-  const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.docDate?`<span title="วันที่ในเอกสาร">🗓 ${esc(shortDocDate(j.docDate))}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:''].filter(Boolean).join('');
+    j.packedAt?`แพ็คเสร็จ ${tShort(j.packedAt)} โดย ${esc(j.packedBy)}`:'', j.loadedAt?`จัดรถ ${tShort(j.loadedAt)} โดย ${esc(j.loadedBy)}`:'', j.shippedAt?`<b style="color:var(--green)">✅ ส่งแล้ว ${esc(dayLabel(String(j.shippedAt).slice(0,10)))}${j.carrier?' · 🚚 '+esc(j.carrier):''}${j.shipDoc?' · '+esc(j.shipDoc):''}</b>`:''].filter(Boolean).join(' · ');
+  const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.shippedAt?`<span class="badge b-packed">✅ ส่งแล้ว · ${esc((j.carrier||'').split('\n')[0])}</span>`:(j.status==='loaded'?'<span class="badge b-urgent" style="background:#64748b">รอยืนยันส่ง</span>':''), j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.docDate?`<span title="วันที่ในเอกสาร">🗓 ${esc(shortDocDate(j.docDate))}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:''].filter(Boolean).join('');
   const right = j.status==='pending'
     ? `<div class="big">${fmt(estOf(j))}<small> กส.</small></div><div class="sm">${fmt(j.totalDoz)} โหล</div>`
-    : `<div class="big" style="color:var(--green)">${fmt(j.packedSacks)}<small> กส.</small></div><div class="sm">${fmt(j.totalDoz)} โหล</div>`;
+    : `<div class="big" style="color:var(--green)">${+j.packedSacks||!+j.packedBoxes?fmt(j.packedSacks)+'<small> กส.</small>':fmt(j.packedBoxes)+'<small> กล่อง</small>'}</div><div class="sm">${+j.packedSacks&&+j.packedBoxes?'+ '+fmt(j.packedBoxes)+' กล่อง · ':''}${fmt(j.totalDoz)} โหล</div>`;
   return `<div class="job st-${j.status} ${urgent?'urgent':''} ${open?'open':''}">
     ${urgent?`<div class="uband">⚡ งานด่วน #${urgNo} — แพ็คก่อน <span>ติดโดย ${esc(j.priorityBy)} ${tShort(j.priorityAt)}</span></div>`:''}
     <div class="jh" onclick="toggle('${id}')">
@@ -604,12 +672,14 @@ function matrix(items){
 /* ================== ACTIONS ================== */
 let CUR=null;
 function openPack(id){ CUR=JOBS.find(j=>j.id===id); pkSub.textContent=`${CUR.custName} · ${CUR.docNo||''}${CUR.sackName?' · กระสอบ “'+CUR.sackName+'”':''}`;
-  const est=estOf(CUR); pkN.value = est; pkHint.textContent = `คำนวณจาก ${fmt(CUR.totalDoz)} โหล ÷ ${CUR.packPerSack||10} โหล/กส. = ${est} กส. — ถ้าแพ็คได้ไม่ตรง กด − / + หรือพิมพ์แก้ได้`; pkNote.value=''; openM('mPack'); setTimeout(()=>pkN.select(),50); }
+  const est=estOf(CUR); pkN.value = est; pkHint.textContent = `คำนวณจาก ${fmt(CUR.totalDoz)} โหล ÷ ${CUR.packPerSack||10} โหล/กส. = ${est} กส. — ถ้าแพ็คได้ไม่ตรง กด − / + หรือพิมพ์แก้ได้`; pkNote.value=''; pkB.value=0; openM('mPack'); setTimeout(()=>pkN.select(),50); }
 function stepS(d){ pkN.value=Math.max(0,(+pkN.value||0)+d); }
-async function confirmPack(){ const n=+pkN.value; if(!(n>0)) return toast('กรุณากรอกจำนวนกระสอบ');
+function stepB(d){ pkB.value=Math.max(0,(+pkB.value||0)+d); }
+async function confirmPack(){ const n=Math.max(0,+pkN.value||0), bx=Math.max(0,+pkB.value||0); if(!(n>0||bx>0)) return toast('กรุณากรอกจำนวนกระสอบ หรือกล่อง');
   const note=pkNote.value.trim(), id=CUR.id; closeM('mPack');
-  quick(id, j=>Object.assign(j,{status:'packed',packedSacks:n,packNote:note,packedBy:USER?USER.name:'-',packedAt:nowIso()}),
-    {action:'setPacked',id,sacks:n,note}, `✅ แพ็คเสร็จ ${n} กส.`); }
+  quick(id, j=>Object.assign(j,{status:'packed',packedSacks:n,packedBoxes:bx,packNote:note,packedBy:USER?USER.name:'-',packedAt:nowIso()}),
+    {action:'setPacked',id,sacks:n,boxes:bx,note}, `✅ แพ็คเสร็จ ${pkTxt(n,bx)}`); }
+function pkTxt(n,bx){ return [n?`${fmt(n)} กส.`:'', bx?`${fmt(bx)} กล่อง`:''].filter(Boolean).join(' + ')||'0 กส.'; }
 /* อัปเดตหน้าจอทันที แล้วบันทึกเบื้องหลัง — ถ้าไม่สำเร็จจะย้อนกลับ */
 async function quick(id, mut, payload, okMsg){
   const j=JOBS.find(x=>x.id===id); if(!j) return;
@@ -628,12 +698,40 @@ function urg(id,on){
   quick(id, j=>{ if(on) Object.assign(j,{priority:Math.max(0,...JOBS.map(x=>+x.priority||0))+1,priorityBy:USER?USER.name:'-',priorityAt:nowIso()}); else Object.assign(j,{priority:0,priorityBy:'',priorityAt:''}); },
     {action:'setPriority',id,on}, on?'⚡ ติดงานด่วนแล้ว':'ยกเลิกด่วนแล้ว'); }
 async function unUrg(id){ await run(null, ()=>callApi({action:'setPriority',id,on:false}), 'ยกเลิกด่วนแล้ว'); }
-function loadOne(id){ quick(id, j=>Object.assign(j,{status:'loaded',loadedBy:USER?USER.name:'-',loadedAt:nowIso(),priority:0}), {action:'setLoaded',id}, '🚚 ส่งแล้ว — เคลียร์ออกจากรายการ'); }
-async function loadAll(ids){ ids=ids.split(','); if(!confirm(`ยืนยันว่าขึ้นรถ/ส่งแล้วทั้ง ${ids.length} งาน?`)) return;
-  for(const id of ids){ quick(id, j=>Object.assign(j,{status:'loaded',loadedBy:USER?USER.name:'-',loadedAt:nowIso(),priority:0}), {action:'setLoaded',id}, `🚚 ส่งแล้ว ${ids.length} งาน`); } }
+/* ===== ขึ้นรถ/ส่งแล้ว + เลือกขนส่ง ===== */
+const DEFAULT_CARRIERS=['บริษัทส่งเอง','นำโชคประเสริฐ Tel: 081-8576661','ม่งเส็งบุรีรัมย์ ต่างอำเภอ Tel: 028880850','ตั้งอี่ฮั๊ว Tel: 02-8874580','เพิ่มพูนผล Tel: 087-0846163',
+  'จิรนันทร์ เพชรบุรี ราชบุรี นครปฐม สมุทรสงคราม Tel: 063-0020695','ชัยภูมิวัฒนสิน อ.เมือง Tel: 02-8881193','สหขนส่งสายใต้ Tel: 085-1345356','อากู๋ Tel: 065-7562445'];
+let SRV_CARRIERS=LS.get('pk_carriers',[]), SHIP_IDS=[], SHIP_MODE='ship';
+function carrierList(){ const out=[], seen={}; [...SRV_CARRIERS, ...DEFAULT_CARRIERS].forEach(c=>{ c=String(c||'').trim(); if(c&&!seen[c]){seen[c]=1;out.push(c);} }); return out; }
+function drawCarriers(){
+  const list=carrierList();
+  carrList.innerHTML=list.map(c=>`<option value="${esc(c)}">`).join('');
+  shChips.innerHTML=list.slice(0,12).map((c,i)=>`<button class="cchip ${shCarrier.value===c?'on':''}" onclick="shCarrier.value=CARR_TMP[${i}];drawCarriers()">${esc(c.replace(/ Tel:.*/,''))}</button>`).join('');
+  window.CARR_TMP=list;
+}
+function openShip(ids, mode){
+  SHIP_IDS=ids; SHIP_MODE=mode||'ship';
+  const js=ids.map(id=>JOBS.find(j=>j.id===id)||REP.find(j=>j.id===id)).filter(Boolean);
+  shTitle.textContent = SHIP_MODE==='edit' ? '✏️ แก้ไขขนส่ง' : `🚚 ขึ้นรถ / ส่งแล้ว ${ids.length>1?ids.length+' งาน':''}`;
+  shSub.textContent = js.map(j=>j.custName).slice(0,6).join(', ')+(js.length>6?` และอีก ${js.length-6} งาน`:'');
+  shCarrier.value = SHIP_MODE==='edit' ? (js[0]&&(js[0].carrier||'')) : 'บริษัทส่งเอง';
+  shOk.textContent = SHIP_MODE==='edit' ? 'บันทึก' : 'ยืนยันส่งแล้ว';
+  drawCarriers(); openM('mShip');
+}
+function loadOne(id){ quick(id, j=>Object.assign(j,{status:'loaded',loadedBy:USER?USER.name:'-',loadedAt:nowIso(),priority:0}), {action:'setLoaded',id,carrier:''}, '🚚 จัดรถแล้ว — รอยืนยันด้วยรายงานตอนเย็น'); }
+function loadAll(ids){ ids=ids.split(','); if(!confirm(`ยืนยันจัดรถแล้วทั้ง ${ids.length} งาน?`)) return;
+  for(const id of ids) quick(id, j=>Object.assign(j,{status:'loaded',loadedBy:USER?USER.name:'-',loadedAt:nowIso(),priority:0}), {action:'setLoaded',id,carrier:''}, `🚚 จัดรถแล้ว ${ids.length} งาน`); }
+async function confirmShip(){
+  const carrier=shCarrier.value.trim()||'บริษัทส่งเอง'; closeM('mShip');
+  if(!SRV_CARRIERS.includes(carrier)){ SRV_CARRIERS=[carrier,...SRV_CARRIERS].slice(0,60); LS.set('pk_carriers',SRV_CARRIERS); }
+  if(SHIP_MODE==='edit'){ const id=SHIP_IDS[0]; const r=REP.find(x=>x.id===id); if(r){ r.carrier=carrier; drawReport(); }
+    try{ await callApi({action:'setCarrier',id,carrier}); toast('✔ แก้ขนส่งแล้ว'); }catch(e){ toast('⚠ บันทึกไม่สำเร็จ: '+e.message); loadReport(); } return; }
+  const n=SHIP_IDS.length;
+  for(const id of SHIP_IDS) quick(id, j=>Object.assign(j,{status:'loaded',loadedBy:USER?USER.name:'-',loadedAt:nowIso(),priority:0,carrier}), {action:'setLoaded',id,carrier}, `🚚 ส่งแล้ว ${n>1?n+' งาน ':''}· ${carrier.replace(/ Tel:.*/,'')}`);
+}
 async function act(action,id,confirmMsg){ if(confirmMsg && !confirm(confirmMsg)) return;
-  if(action==='undo'){ const j=JOBS.find(x=>x.id===id); if(j&&j.status==='loaded') return quick(id, j=>Object.assign(j,{status:'packed',loadedBy:'',loadedAt:''}), {action,id}, '↩ ยกเลิกส่งแล้ว');
-    return quick(id, j=>Object.assign(j,{status:'pending',packedSacks:'',packNote:'',packedBy:'',packedAt:''}), {action,id}, '↩ ยกเลิกแพ็คเสร็จแล้ว'); }
+  if(action==='undo'){ const j=JOBS.find(x=>x.id===id); if(j&&j.status==='loaded') return quick(id, j=>Object.assign(j,{status:'packed',loadedBy:'',loadedAt:'',carrier:'',shippedAt:'',shipDoc:''}), {action,id}, '↩ ยกเลิกจัดรถแล้ว');
+    return quick(id, j=>Object.assign(j,{status:'pending',packedSacks:'',packedBoxes:'',packNote:'',packedBy:'',packedAt:''}), {action,id}, '↩ ยกเลิกแพ็คเสร็จแล้ว'); }
   await run(null, ()=>callApi({action,id}), 'บันทึกแล้ว'); }
 async function run(btn, fn, okMsg){
   if(BUSY) return; BUSY=true; if(btn){btn.disabled=true;}
@@ -646,15 +744,26 @@ async function run(btn, fn, okMsg){
 const drop=document.getElementById('drop');
 ['dragenter','dragover'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('hov')}));
 ['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('hov')}));
+['dragenter','dragover'].forEach(e=>repDrop.addEventListener(e,ev=>{ev.preventDefault();repDrop.classList.add('hov')}));
+['dragleave','drop'].forEach(e=>repDrop.addEventListener(e,ev=>{ev.preventDefault();repDrop.classList.remove('hov')}));
+repDrop.addEventListener('drop',ev=>{ev.stopPropagation();handleReportFiles(ev.dataTransfer.files);});
 drop.addEventListener('drop',ev=>{ev.stopPropagation();dropAny(ev);});
 /* วางไฟล์ได้ทั้งหน้า — ไม่ต้องเปิดแท็บนำเข้าก่อน */
 window.addEventListener('dragover',ev=>{ev.preventDefault(); document.body.classList.add('dragging');});
 window.addEventListener('dragleave',ev=>{ if(!ev.relatedTarget) document.body.classList.remove('dragging'); });
 window.addEventListener('drop',ev=>{ev.preventDefault(); dropAny(ev);});
+async function routeFiles(files){
+  const rep=[], other=[];
+  for(const f of files){ let isRep=false;
+    if(/\.xlsx?$/i.test(f.name)){ try{ const wb=XLSX.read(await f.arrayBuffer(),{type:'array'}); isRep=wb.SheetNames.some(sn=>isShipReport(XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:null,raw:true}))); }catch(e){} }
+    (isRep?rep:other).push(f); }
+  if(rep.length){ showTab('rep'); handleReportFiles(rep); }
+  if(other.length){ if(!rep.length) showTab('import'); handleFiles(other); }
+}
 function dropAny(ev){
   document.body.classList.remove('dragging');
   const files=[...(ev.dataTransfer.files||[])].filter(f=>/\.(xlsx|xls|xlsm|pdf)$/i.test(f.name));
-  if(files.length){ showTab('import'); handleFiles(files); return; }
+  if(files.length){ routeFiles(files); return; }
   toast('⚠ ลากจากอีเมลตรงๆ ไม่ได้ — กด Download ไฟล์ในอีเมลก่อน แล้วลากจากแถบดาวน์โหลด (Ctrl+J) มาวางแทน',6000);
 }
 
@@ -728,6 +837,144 @@ async function saveImport(){
   PREVIEW=[]; prev.innerHTML=''; showTab('list');
 }
 
+/* ================== REPORT: รายงานการส่งสินค้าประจำวัน ================== */
+/* ===== รายงานการส่งสินค้า: อ่านไฟล์ Excel ของชัย → เทียบกับงานในแอป → ยืนยันส่ง ===== */
+let REP=[], RECON=[];   // REP = แถวรายงานที่บันทึกแล้วของวันที่เลือก
+const isShipReport = rows => rows.slice(0,15).some(r=>(r||[]).some(c=>/invoice\s*no/i.test(String(c||'')))&&(r||[]).some(c=>/logistics/i.test(String(c||''))));
+function parseShipReport(rows, sheetName){
+  const S=v=>v==null?'':String(v).trim();
+  const h=rows.findIndex(r=>(r||[]).some(c=>/invoice\s*no/i.test(S(c))));
+  const H=(rows[h]||[]).map(S), ix=re=>H.findIndex(c=>re.test(c));
+  const cNo=ix(/^#$/), cDate=ix(/delivery/i), cDoc=ix(/invoice/i), cCust=ix(/customer/i), cCar=ix(/logistics/i), cBox=ix(/กล่อง/), cSack=ix(/กระสอบ/);
+  const title=rows.slice(0,h).flat().map(S).filter(Boolean).join(' ');
+  const source = /เอเยนต์/.test(title+sheetName) ? 'EXCEL' : 'PDF';
+  let date=''; const t=/(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(title); if(t){ let y=+t[3]; if(y>2400) y-=543; date=`${y}-${t[2].padStart(2,'0')}-${t[1].padStart(2,'0')}`; }
+  const out=[];
+  for(let i=h+1;i<rows.length;i++){ const r=rows[i]||[]; const doc=S(r[cDoc]);
+    if(/รวม/.test(S(r[0]))) break; if(!doc) continue;
+    let d=r[cDate]; if(typeof d==='number'){ const o=XLSX.SSF.parse_date_code(d); d=`${o.y}-${String(o.m).padStart(2,'0')}-${String(o.d).padStart(2,'0')}`; }
+    out.push({no:S(r[cNo]), date:S(d).slice(0,10)||date, docNo:doc, custName:S(r[cCust]), carrier:S(r[cCar]), boxes:+r[cBox]||0, sacks:+r[cSack]||0});
+  }
+  return {source, date: date || (out[0]&&out[0].date) || '', rows: out};
+}
+const normName = s => String(s||'').toLowerCase().replace(/ห้างหุ้นส่วนจำกัด|ห้างหุ้นส่วน|หจก\.?|บริษัท|บจก\.?|จำกัด|\(มหาชน\)|มหาชน|ร้าน|คุณ|นางสาว|น\.ส\.|นาย|นาง|\s|\.|,|\(|\)|-/g,'');
+async function handleReportFiles(fl){
+  const files=[...fl]; RECON=[];
+  recon.innerHTML='<div class="empty">⏳ กำลังอ่านรายงาน…</div>';
+  for(const f of files){ try{
+      const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+      for(const sn of wb.SheetNames){ const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:null,raw:true});
+        if(isShipReport(rows)){ const p=parseShipReport(rows,sn); if(p.rows.length) RECON.push(Object.assign(p,{file:f.name})); } }
+    }catch(e){ toast('อ่านไฟล์ไม่ได้: '+f.name); } }
+  if(!RECON.length){ recon.innerHTML='<div class="note" style="background:var(--red-bg)">ไม่พบตาราง “Invoice No / Logistics Provider” ในไฟล์ — ต้องเป็นไฟล์รายงานการส่งสินค้าประจำวัน</div>'; return; }
+  matchRecon(); drawRecon();
+}
+/* จับคู่ทุกแถวกับงานในแอป */
+function matchRecon(){
+  const used={};
+  RECON.forEach(rp=>{
+    // 1) ตรงเลขเอกสาร (IFO / TFV / SO)
+    rp.rows.forEach(r=>{ const j=JOBS.find(x=>x.id===r.docNo||x.docNo===r.docNo); r.jobId=j?j.id:''; r.how=j?'doc':''; if(j) used[j.id]=1; });
+    // 2) เอเยนต์ (AI…): เทียบชื่อลูกค้า กับใบเบิก Excel ที่ยังไม่ยืนยันส่ง
+    rp.rows.filter(r=>!r.jobId && rp.source==='EXCEL').forEach(r=>{
+      const n=normName(r.custName);
+      const cands=JOBS.filter(j=>j.source==='EXCEL' && !j.shippedAt && n && (normName(j.custName)===n || normName(j.custName).includes(n) || n.includes(normName(j.custName))));
+      r.cands=cands.map(j=>j.id);
+      const free=cands.filter(j=>!used[j.id]);
+      let pick = free.length===1 ? free[0] : free.find(j=>(+j.packedSacks||0)===r.sacks && r.sacks>0);
+      if(pick && free.length>1 && free.filter(j=>(+j.packedSacks||0)===r.sacks).length>1) pick=null;
+      if(pick){ r.jobId=pick.id; r.how='name'; used[pick.id]=1; }
+    });
+  });
+}
+function jobLabel(j){ return `${j.docNo||j.id} · ${j.custName}${j.trip?' · เที่ยว '+j.trip:''} · ${fmt(+j.packedSacks||0)} กส.${+j.packedBoxes?' + '+fmt(j.packedBoxes)+' กล่อง':''}`; }
+function drawRecon(){
+  const html=RECON.map((rp,ri)=>{
+    const ok=rp.rows.filter(r=>r.jobId).length, out=rp.rows.length-ok;
+    const ids=new Set(rp.rows.map(r=>r.jobId).filter(Boolean));
+    // งานที่จัดรถแล้วแต่ไม่อยู่ในรายงานนี้
+    const missing=JOBS.filter(j=>j.status==='loaded' && !j.shippedAt && (rp.source==='PDF'?j.source==='PDF':j.source==='EXCEL') && !ids.has(j.id) && dayKey(j.loadedAt)<=rp.date);
+    const tot={}; rp.rows.forEach(r=>{ if(r.jobId){ const t=tot[r.jobId]=tot[r.jobId]||{b:0,s:0,first:r}; t.b+=r.boxes||0; t.s+=r.sacks||0; } });
+    const rowsHtml=rp.rows.map((r,i)=>{
+      const j=r.jobId?JOBS.find(x=>x.id===r.jobId):null;
+      let st='', sel='';
+      if(j){ const pkS=+j.packedSacks||0, pkB=+j.packedBoxes||0, t=tot[j.id];
+        const diff = t.first===r && (pkS||pkB) && (pkS!==t.s || pkB!==t.b);
+        st = (j.status!=='loaded'?'<span class="tag t-warn">ยังไม่กดจัดรถ → จะยืนยันให้</span>':'<span class="tag t-ok">✅ ตรงกับงานในแอป</span>')
+           + (r.how==='name'?' <span class="tag t-info">จับคู่จากชื่อ</span>':'')
+           + (diff?` <span class="tag t-warn">⚠ ทีมแพ็คกรอก ${fmt(pkS)} กส. / ${fmt(pkB)} กล่อง · รายงาน ${fmt(t.s)} กส. / ${fmt(t.b)} กล่อง</span>`:'')
+           + (t.first!==r?' <span class="tag t-info">แยกส่งหลายขนส่ง</span>':'');
+      } else if(r.cands && r.cands.length){ st='<span class="tag t-warn">⚠ เลือกงานที่ตรงกัน</span>'; }
+      else st='<span class="tag t-grey">ไม่อยู่ในแอป · บันทึกในรายงานอย่างเดียว</span>';
+      if(rp.source==='EXCEL' && ((r.cands&&r.cands.length)||r.how==='name')){
+        const opts=(r.cands||[]).map(id=>JOBS.find(x=>x.id===id)).filter(Boolean);
+        sel=`<select onchange="RECON[${ri}].rows[${i}].jobId=this.value;RECON[${ri}].rows[${i}].how=this.value?'name':'';drawRecon()"><option value="">— ไม่จับคู่ —</option>${opts.map(o=>`<option value="${esc(o.id)}" ${o.id===r.jobId?'selected':''}>${esc(jobLabel(o))}</option>`).join('')}</select>`;
+      }
+      return `<tr><td>${esc(r.no)}</td><td class="mono">${esc(r.docNo)}</td><td style="text-align:left">${esc(r.custName).slice(0,60)}</td><td style="text-align:left;white-space:pre-line">${esc(r.carrier)}</td><td class="q">${r.boxes||''}</td><td class="q">${r.sacks||''}</td><td style="text-align:left">${st}${sel?'<br>'+sel:''}</td></tr>`;
+    }).join('');
+    return `<div class="rep-card" style="margin-top:12px;border:2px solid var(--navy2)">
+      <div class="rep-title">📥 ${rp.source==='PDF'?'ส่งตรง':'เอเยนต์'} · ${esc(dayLabel(rp.date))} <span class="gs" style="font-weight:500;color:var(--mute);font-size:13px">(${esc(rp.file)})</span></div>
+      <div class="sum-line">${rp.rows.length} แถว · จับคู่กับงานในแอป <b>${ok}</b> · ไม่อยู่ในแอป ${out}${missing.length?` · <b style="color:var(--red)">⚠ จัดรถแล้วแต่ไม่มีในรายงาน ${missing.length} งาน</b>`:''}</div>
+      <div class="mtx"><table class="rep"><tr><th>#</th><th>Invoice No</th><th style="text-align:left">Customer</th><th style="text-align:left">Logistics Provider</th><th>กล่อง</th><th>กระสอบ</th><th style="text-align:left">ผลการเทียบ</th></tr>${rowsHtml}</table></div>
+      ${missing.length?`<div class="note pr" style="margin-top:8px">⚠ <b>จัดรถแล้วในแอป แต่ไม่มีในรายงานนี้</b> (จะยังค้างเป็น “รอยืนยันส่ง”):<br>${missing.map(j=>`• ${esc(j.docNo||j.id)} ${esc(j.custName)} — จัดรถ ${tShort(j.loadedAt)}`).join('<br>')}</div>`:''}
+    </div>`;
+  }).join('');
+  recon.innerHTML=html+`<div class="savebar"><button class="btn btn-pack" id="reconOk" onclick="saveRecon()">✔ ยืนยันบันทึกรายงาน</button><button class="btn btn-ghost" onclick="RECON=[];recon.innerHTML=''">ยกเลิก</button></div>`;
+}
+async function saveRecon(){
+  const b=document.getElementById('reconOk'); b.disabled=true; b.textContent='กำลังบันทึก…';
+  try{
+    let up=0;
+    for(const rp of RECON){
+      const r=await callApi({action:'importShipReport',date:rp.date,source:rp.source,rows:rp.rows.map(x=>({no:x.no,docNo:x.docNo,custName:x.custName,carrier:x.carrier,boxes:x.boxes||'',sacks:x.sacks||'',jobId:x.jobId||''}))});
+      up+=r.updated||0;
+    }
+    toast(`✔ บันทึกรายงานแล้ว · ยืนยันส่ง ${up} งาน`,3500);
+    const d=RECON[0].date; RECON=[]; recon.innerHTML=''; rDate.value=d; await refresh(); loadReport();
+  }catch(e){ toast('⚠ บันทึกไม่สำเร็จ: '+e.message,4500); b.disabled=false; b.textContent='✔ ยืนยันบันทึกรายงาน'; }
+}
+async function loadReport(){
+  repBody.innerHTML='<div class="empty">⏳ กำลังโหลด…</div>';
+  try{ REP=(await callApi({action:'report',date:rDate.value})).rows||[]; drawReport(); }
+  catch(e){ repBody.innerHTML=`<div class="empty">⚠ โหลดไม่สำเร็จ: ${esc(e.message)}<br><small>(ถ้าเพิ่งอัปเดต ต้อง Deploy Apps Script V6 ก่อน)</small></div>`; }
+  drawWaiting();
+}
+function repTitleText(){ const [y,m,d]=(rDate.value||'').split('-'); const sfx=rSrc.value==='PDF'?' (ส่งตรง)':rSrc.value==='EXCEL'?' (เอเยนต์)':'';
+  return `รายงานการส่งสินค้าประจำวันที่ ${d}/${m}/${(+y)+543}${sfx}`; }
+function repItems(){ const src=rSrc.value; return REP.filter(r=>!src||r.source===src).map((r,i)=>Object.assign({},r,{n:i+1})); }
+function repData(){ return repItems().map(r=>[r.n, rDate.value, r.docNo, r.custName, r.carrier, +r.boxes||'', +r.sacks||'']); }
+function drawReport(){
+  repTitle.textContent=repTitleText();
+  const rows=repItems();
+  if(!rows.length){ repBody.innerHTML='<div class="empty">ยังไม่มีรายงานของวันนี้ — ลากไฟล์รายงานมาวางด้านบน</div>'; return; }
+  const tb=rows.reduce((s,r)=>s+(+r.boxes||0),0), ts=rows.reduce((s,r)=>s+(+r.sacks||0),0);
+  repBody.innerHTML=`<div class="mtx"><table class="rep"><tr><th>#</th><th>Invoice No</th><th style="text-align:left">Customer / Description</th><th style="text-align:left">Logistics Provider</th><th>กล่อง</th><th>กระสอบ</th><th>ในแอป</th></tr>
+    ${rows.map(r=>`<tr><td>${r.n}</td><td class="mono">${esc(r.docNo)}</td><td style="text-align:left">${esc(r.custName).slice(0,70)}</td><td style="text-align:left;white-space:pre-line">${esc(r.carrier)}</td><td class="q">${+r.boxes?fmt(r.boxes):''}</td><td class="q">${+r.sacks?fmt(r.sacks):''}</td><td>${r.jobId?'✅':'—'}</td></tr>`).join('')}
+    <tr><td colspan="4" class="t" style="text-align:left">รวมทั้งหมด</td><td class="t">${fmt(tb)}</td><td class="t">${fmt(ts)}</td><td class="t"></td></tr></table></div>`;
+}
+function drawWaiting(){
+  const w=JOBS.filter(j=>j.status==='loaded'&&!j.shippedAt).sort((a,b)=>String(a.loadedAt).localeCompare(String(b.loadedAt)));
+  waitBox.innerHTML = w.length ? `<div class="note pr" style="margin-top:12px"><b>🚚 จัดรถแล้ว รอยืนยันส่ง ${w.length} งาน</b> — จะยืนยันเมื่อลากรายงานที่มีเลขบิลเหล่านี้<br>${w.map(j=>`• ${esc(j.docNo||j.id)} ${esc(j.custName)} — จัดรถ ${tShort(j.loadedAt)}${dayKey(j.loadedAt)<dayKey(new Date())?' <b style="color:var(--red)">(ค้างข้ามวัน)</b>':''}`).join('<br>')}</div>` : '';
+}
+function exportReport(){
+  const rows=repData(); if(!rows.length) return toast('ไม่มีข้อมูลในวันที่เลือก');
+  const tb=rows.reduce((s,r)=>s+(+r[5]||0),0), ts=rows.reduce((s,r)=>s+(+r[6]||0),0);
+  const aoa=[[repTitleText()],[],[],['#','Delivery Date','Invoice No','Customer / Description','Logistics Provider','กล่อง','กระสอบ'],...rows,['รวมทั้งหมด','','','','',tb,ts]];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:5},{wch:13},{wch:16},{wch:42},{wch:34},{wch:8},{wch:8}];
+  ws['!merges']=[{s:{r:0,c:0},e:{r:2,c:6}},{s:{r:aoa.length-1,c:0},e:{r:aoa.length-1,c:4}}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'รายงานส่งของ');
+  const [y,m,d]=rDate.value.split('-');
+  XLSX.writeFile(wb,`รายงานการส่งสินค้า_${d}-${m}-${(+y)+543}${rSrc.value==='PDF'?'_ส่งตรง':rSrc.value==='EXCEL'?'_เอเยนต์':''}.xlsx`);
+}
+async function copyReport(){
+  const rows=repData(); if(!rows.length) return toast('ไม่มีข้อมูลในวันที่เลือก');
+  const tb=rows.reduce((s,r)=>s+(+r[5]||0),0), ts=rows.reduce((s,r)=>s+(+r[6]||0),0);
+  const q=v=>/[\t\n"]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':v;
+  const txt=[repTitleText(),'',['#','Delivery Date','Invoice No','Customer / Description','Logistics Provider','กล่อง','กระสอบ'].join('\t'),...rows.map(r=>r.map(q).join('\t')),['รวมทั้งหมด','','','','',tb,ts].join('\t')].join('\n');
+  try{ await navigator.clipboard.writeText(txt); toast('📋 คัดลอกแล้ว — วางใน Teams หรือ Excel ได้เลย'); }catch(e){ toast('คัดลอกไม่ได้ — ใช้ปุ่มดาวน์โหลด Excel แทน'); }
+}
+
 /* ================== SUMMARY ================== */
 function renderSum(){
   const pend=JOBS.filter(j=>j.status==='pending');
@@ -738,7 +985,7 @@ function renderSum(){
 }
 
 /* ================== GENERIC UI ================== */
-function showTab(t){ ['list','import','sum'].forEach(x=>document.getElementById('pg-'+x).style.display=x===t?'':'none');
+function showTab(t){ if(t==='rep'){ if(!rDate.value) rDate.value=dayKey(new Date()); loadReport(); } ['list','import','sum','rep'].forEach(x=>document.getElementById('pg-'+x).style.display=x===t?'':'none');
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t)); if(t==='sum') renderSum(); }
 function openM(id){document.getElementById(id).classList.add('on')} function closeM(id){document.getElementById(id).classList.remove('on')}
 let tt; function toast(m,ms=2600){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; clearTimeout(tt); tt=setTimeout(()=>t.style.display='none',ms); }
