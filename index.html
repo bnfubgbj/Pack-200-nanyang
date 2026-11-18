@@ -141,6 +141,10 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .chev{color:#9aa1ad;font-size:13px;width:12px}
 .jt .nm{font-size:15.5px}
 .jsub{margin-top:1px!important;font-size:12.5px!important;gap:4px 10px!important;align-items:center}
+.due{display:inline-block;font-size:12px;font-weight:700;padding:1px 8px;border-radius:6px;background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe}
+.due.near{background:#fff7ed;color:#c2410c;border-color:#fdba74}
+.due.late{background:#fee2e2;color:#b91c1c;border-color:#fca5a5}
+.due.ok{background:#f1f5f9;color:#64748b;border-color:#e2e8f0}
 .jsub .sack{font-size:12px;padding:0 6px}
 .csum{display:flex;flex-wrap:wrap;gap:2px 10px;margin-top:3px;font-size:12px;color:#555}
 .csum .dot{width:9px;height:9px;margin-right:3px}
@@ -648,6 +652,21 @@ function jobDay(j){ return parseThaiDate(j.docDate) || dayKey(j.createdAt); }
 function dayLabel(k){ if(k==='0000-00-00') return 'ไม่ทราบวันที่'; const [y,m,dd]=k.split('-').map(Number); const d=new Date(y,m-1,dd);
   const t=dayKey(new Date()), yd=dayKey(new Date(Date.now()-864e5));
   return `${TH_D[d.getDay()]} ${dd} ${TH_M[m-1]} ${String(y+543).slice(2)}` + (k===t?' (วันนี้)':k===yd?' (เมื่อวาน)':k===dayKey(new Date(Date.now()+864e5))?' (พรุ่งนี้)':''); }
+/* กำหนดส่ง จากใบเอเยนต์ เช่น "ส่ง 30/11/69" (อยู่ในช่องชื่อกระสอบ/หมายเหตุ) */
+function dueOf(j){
+  const t=[j.sackName,j.note].filter(Boolean).join(' • ');
+  const m=/ส่ง(?:วันที่)?\s*(\d{1,2})\s*[\/\-\.]\s*(\d{1,2})(?:\s*[\/\-\.]\s*(\d{2,4}))?/.exec(t); if(!m) return null;
+  let y=m[3]?+m[3]:new Date().getFullYear(); if(y<100) y+=2500; if(y>2400) y-=543;
+  const d=new Date(y,+m[2]-1,+m[1]); if(isNaN(d)||d.getMonth()!==+m[2]-1) return null; return d;
+}
+function dueBadge(j){
+  const d=dueOf(j); if(!d) return '';
+  const t0=new Date(); t0.setHours(0,0,0,0); const diff=Math.round((d-t0)/864e5);
+  const cls = j.status==='loaded' ? 'due ok' : diff<0 ? 'due late' : diff<=2 ? 'due near' : 'due';
+  const lbl = diff<0 ? `เลยกำหนด ${-diff} วัน` : diff===0 ? 'วันนี้' : diff===1 ? 'พรุ่งนี้' : `อีก ${diff} วัน`;
+  const p=n=>String(n).padStart(2,'0');
+  return `<span class="${cls}" title="กำหนดส่งจากใบเอเยนต์">📆 กำหนดส่ง ${p(d.getDate())}/${p(d.getMonth()+1)}/${String(d.getFullYear()+543).slice(2)}${j.status==='loaded'?'':' · '+lbl}</span>`;
+}
 function shortDocDate(s){ return String(s).replace('มกราคม','ม.ค.').replace('กุมภาพันธ์','ก.พ.').replace('มีนาคม','มี.ค.').replace('เมษายน','เม.ย.').replace('พฤษภาคม','พ.ค.').replace('มิถุนายน','มิ.ย.').replace('กรกฎาคม','ก.ค.').replace('สิงหาคม','ส.ค.').replace('กันยายน','ก.ย.').replace('ตุลาคม','ต.ค.').replace('พฤศจิกายน','พ.ย.').replace('ธันวาคม','ธ.ค.'); }
 /* จำนวนกระสอบโดยประมาณ = ยอดโหลทั้งหมด ÷ โหลต่อกระสอบ (ปัดขึ้น, อย่างน้อย 1) — ใช้กับทุกรุ่น */
 const PROG_MIN=100; // งานตั้งแต่ 100 กส. ขึ้นไป มีปุ่มบันทึกความคืบหน้า
@@ -679,7 +698,7 @@ function jobCard(j, urgNo){
   acts+=`<button class="btn btn-del" onclick="act('deleteJob','${id}','ลบงานนี้ออกจากระบบ?')">🗑 ลบงาน</button>`;
   const meta=[ j.createdAt?`นำเข้า ${tShort(j.createdAt)} โดย ${esc(j.createdBy)}`:'',
     j.packedAt?`แพ็คเสร็จ ${tShort(j.packedAt)} โดย ${esc(j.packedBy)}`:'', j.loadedAt?`จัดรถ ${tShort(j.loadedAt)} โดย ${esc(j.loadedBy)}`:'', j.shippedAt?`<b style="color:var(--green)">✅ ส่งแล้ว ${esc(dayLabel(String(j.shippedAt).slice(0,10)))}${j.carrier?' · 🚚 '+esc(j.carrier):''}${j.shipDoc?' · '+esc(j.shipDoc):''}</b>`:''].filter(Boolean).join(' · ');
-  const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.shippedAt?`<span class="badge b-packed">✅ ส่งแล้ว · ${esc((j.carrier||'').split('\n')[0])}</span>`:(j.status==='loaded'?'<span class="badge b-urgent" style="background:#64748b">รอยืนยันส่ง</span>':''), j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.docDate?`<span title="วันที่ในเอกสาร">🗓 ${esc(shortDocDate(j.docDate))}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:'', (j.createdAt&&dayKey(j.createdAt)===dayKey(new Date()))?`<span class="newb" title="นำเข้าระบบวันนี้">🆕 นำเข้า ${tShort(j.createdAt).slice(6)} ${esc(j.createdBy||'')}</span>`:''].filter(Boolean).join('');
+  const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.shippedAt?`<span class="badge b-packed">✅ ส่งแล้ว · ${esc((j.carrier||'').split('\n')[0])}</span>`:(j.status==='loaded'?'<span class="badge b-urgent" style="background:#64748b">รอยืนยันส่ง</span>':''), j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', dueBadge(j), j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.docDate?`<span title="วันที่ในเอกสาร">🗓 ${esc(shortDocDate(j.docDate))}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:'', (j.createdAt&&dayKey(j.createdAt)===dayKey(new Date()))?`<span class="newb" title="นำเข้าระบบวันนี้">🆕 นำเข้า ${tShort(j.createdAt).slice(6)} ${esc(j.createdBy||'')}</span>`:''].filter(Boolean).join('');
   const right = cvOnly && j.status!=='loaded'
     ? `<div class="big" style="color:#7c4a1e">${fmt(cvPairsOf(j))}<small> คู่</small></div><div class="sm">👟 ผ้าใบ</div>`
     : j.status==='pending'
