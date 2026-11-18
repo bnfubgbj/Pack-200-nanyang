@@ -43,6 +43,13 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .filters input,.filters select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fff}
 .filters input{flex:1;min-width:180px}
 .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}
+.pbar{margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--navy2);font-weight:600}
+.pbar .tr{flex:1;max-width:320px;height:10px;background:#e6ebf3;border-radius:99px;overflow:hidden}
+.pbar .tr i{display:block;height:100%;background:linear-gradient(90deg,#2f855a,#48bb78);border-radius:99px}
+.pbar small{font-weight:400;color:var(--mute)}
+.qb.q-prog{background:#fff;border:1.5px solid #2f855a;color:#2f855a}
+.pgadd{display:flex;gap:8px;margin-top:8px}.pgadd button{flex:1;border:1px solid var(--line);background:#f4f7fb;border-radius:10px;padding:8px;font:inherit;font-weight:600;cursor:pointer}
+.newb{display:inline-block;font-size:11.5px;font-weight:700;background:#e0f2fe;color:#0369a1;border-radius:99px;padding:1px 8px}
 .srcbar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
 .sb{border:2px solid var(--line);background:#fff;border-radius:12px;padding:10px;font:inherit;font-size:15px;font-weight:600;cursor:pointer;color:var(--navy)}
 .sb b{display:inline-block;margin-left:6px;font-size:12.5px;font-weight:600;color:var(--amber)}
@@ -244,7 +251,7 @@ table.rep select{font:inherit;font-size:12.5px;max-width:340px;margin-top:3px}
       <select id="fSrc" style="display:none" onchange="render()"><option value="">ทุกแหล่ง</option><option value="EXCEL">เอเยนต์ (Excel)</option><option value="PDF">ส่งตรง (PDF)</option></select>
       <select id="fTrip" onchange="render()"><option value="">ทุกเที่ยว</option></select>
       <select id="fDay" onchange="if(this.value==='pick'){fDate.style.display='';fDate.showPicker&&fDate.showPicker();}else{fDate.style.display='none';}render()">
-        <option value="">ทุกวัน</option><option value="today">วันนี้</option><option value="tmr">พรุ่งนี้</option><option value="yday">เมื่อวาน</option><option value="pick">เลือกวันที่…</option></select>
+        <option value="">ทุกวัน</option><option value="today">วันนี้</option><option value="tmr">พรุ่งนี้</option><option value="yday">เมื่อวาน</option><option value="impToday">🆕 นำเข้าวันนี้</option><option value="pick">เลือกวันที่…</option></select>
       <input type="date" id="fDate" style="display:none;flex:0;min-width:150px" onchange="render()">
       <button class="chip" id="btnAll" onclick="toggleAll()">กางทั้งหมด</button>
       <input id="fQ" placeholder="🔍 ค้นหา ลูกค้า / SO / IFO / ชื่อกระสอบ" oninput="render()">
@@ -321,6 +328,15 @@ table.rep select{font:inherit;font-size:12.5px;max-width:340px;margin-top:3px}
   <div class="stepper"><button onclick="stepB(-1)">−</button><input id="pkB" class="bigin" type="number" inputmode="numeric" min="0" value="0"><button onclick="stepB(1)">+</button></div>
   <label>หมายเหตุ (ถ้ามี)</label><input id="pkNote" placeholder="เช่น ขาดเบอร์ 9 สีแดง 1 โหล">
   <div class="mact"><button class="btn btn-ghost" onclick="closeM('mPack')">ยกเลิก</button><button class="btn btn-pack" id="pkOk" onclick="confirmPack()">ยืนยันแพ็คเสร็จ</button></div>
+</div></div>
+
+<div class="mask" id="mProg"><div class="modal">
+  <h3>📈 บันทึกความคืบหน้า</h3><div class="sub" id="pgSub"></div>
+  <label>แพ็คเสร็จแล้วทั้งหมด (สะสม) กี่กระสอบ</label>
+  <div class="stepper"><button onclick="stepP(-10)">−10</button><input id="pgN" class="bigin" type="number" inputmode="numeric" min="0"><button onclick="stepP(10)">+10</button></div>
+  <div class="pgadd"><button onclick="stepP(20)">+20</button><button onclick="stepP(50)">+50</button><button onclick="stepP(100)">+100</button></div>
+  <div style="font-size:12.5px;color:var(--mute);margin-top:6px" id="pgHint"></div>
+  <div class="mact"><button class="btn btn-ghost" onclick="closeM('mProg')">ยกเลิก</button><button class="btn btn-pack" onclick="confirmProg()">บันทึก</button></div>
 </div></div>
 
 <div class="mask" id="mShip"><div class="modal">
@@ -405,7 +421,8 @@ function parsePdfPages(pages,fileName){
       const t=l.t;
       if(!d.custCode){const m=/รหัสลูกค้า\s*:\s*([0-9A-Za-zก-๙\-]+)/.exec(t); if(m) d.custCode=m[1];}
       if(!d.custName && /ค้า\s*:/.test(t) && !/รหัส|ประเภท|ภาษี/.test(t) && /^ช/.test(t)){d.custName=t.split(':').slice(1).join(':').replace(/ว\s?ันที.*$/,'').trim();}
-      if(!d.date){const m=/(?:^|\s)วันที\S*\s*:\s*(\d{1,2}\s*\S+\s*\d{4})/.exec(t); if(m && !/อ้างอิง|พิมพ์/.test(t.slice(0,m.index+10))) d.date=m[1];}
+      if(!d.date && /เลขที/.test(t) && /[A-Z]{2,5}-\d{5,}/.test(t)){const m=/(\d{1,2}\s*[ก-๙\.]+\s*\d{4})/.exec(t); if(m) d.date=m[1];}  // วันที่บิล (อยู่บรรทัดเดียวกับเลขที่)
+      if(!d.date){const m=/(?:^|\s)วันที\S*\s*:\s*(\d{1,2}\s*\S+\s*\d{4})/.exec(t); if(m && !/อ้าง|พิมพ์|ครบ|กำหนด/.test(m[0])) d.date=m[1];}
       if(!d.ref){const m=/อ้างอิง\s*:\s*([A-Z]{2}[\w\-]+)/.exec(t); if(m) d.ref=m[1];}
       if(!d.remark && /^หมายเหตุ/.test(t)) d.remark=t.replace(/^หมายเหตุ\s*:\s*/,'').replace(/\*+/g,' ').trim();
       if(!d.province){const m=/จ\.\s*([ก-๙]{3,})/.exec(t); if(m && !/นันยาง/.test(t)) d.province=m[1];}
@@ -524,6 +541,7 @@ function demoApi(p){
   if(p.action==='setPriority'){ if(p.on){ Object.assign(j,{priority:Math.max(0,...jobs.map(x=>+x.priority||0))+1,priorityNote:p.note||'',priorityBy:u,priorityAt:nowIso()}); line=`⚡ แจ้งกลุ่มทีมแพ็ค: เร่ง ${j.custName}`; } else Object.assign(j,{priority:0,priorityNote:'',priorityBy:'',priorityAt:''}); }
   if(p.action==='setLoaded'){ if(j.status==='loaded') throw new Error('จัดรถไปแล้ว'); Object.assign(j,{status:'loaded',loadedBy:u,loadedAt:nowIso(),priority:0,carrier:p.carrier||'บริษัทส่งเอง'}); }
   if(p.action==='setCarrier'){ j.carrier=p.carrier; }
+  if(p.action==='setProgress'){ Object.assign(j,{progSacks:+p.sacks||0,progBy:u,progAt:nowIso()}); }
   if(p.action==='undo'){ if(j.status==='loaded') Object.assign(j,{status:j.packedAt?'packed':'pending',loadedBy:'',loadedAt:'',shippedAt:'',carrier:''}); else if(j.status==='packed') Object.assign(j,{status:'pending',packedSacks:'',packedBoxes:'',packNote:'',packedBy:'',packedAt:''}); }
   if(p.action==='deleteJob'){ jobs = jobs.filter(x=>x.id!==p.id); }
   LS.set('pk_demo_jobs',jobs); demoLine(line); return {ok:true};
@@ -586,6 +604,7 @@ function render(){
     if(src && j.source!==src) return false;
     if(trip && String(j.trip)!==trip) return false;
     if(dayF && jobDay(j)!==dayF) return false;
+    if(dv==='impToday' && dayKey(j.createdAt)!==dayKey(new Date())) return false;
     if(q && ![j.custName,j.custCode,j.docNo,j.ref,j.sackName,j.note,j.transport].join(' ').toLowerCase().includes(q)) return false;
     return true;
   });
@@ -631,6 +650,8 @@ function dayLabel(k){ if(k==='0000-00-00') return 'ไม่ทราบวั�
   return `${TH_D[d.getDay()]} ${dd} ${TH_M[m-1]} ${String(y+543).slice(2)}` + (k===t?' (วันนี้)':k===yd?' (เมื่อวาน)':k===dayKey(new Date(Date.now()+864e5))?' (พรุ่งนี้)':''); }
 function shortDocDate(s){ return String(s).replace('มกราคม','ม.ค.').replace('กุมภาพันธ์','ก.พ.').replace('มีนาคม','มี.ค.').replace('เมษายน','เม.ย.').replace('พฤษภาคม','พ.ค.').replace('มิถุนายน','มิ.ย.').replace('กรกฎาคม','ก.ค.').replace('สิงหาคม','ส.ค.').replace('กันยายน','ก.ย.').replace('ตุลาคม','ต.ค.').replace('พฤศจิกายน','พ.ย.').replace('ธันวาคม','ธ.ค.'); }
 /* จำนวนกระสอบโดยประมาณ = ยอดโหลทั้งหมด ÷ โหลต่อกระสอบ (ปัดขึ้น, อย่างน้อย 1) — ใช้กับทุกรุ่น */
+const PROG_MIN=100; // งานตั้งแต่ 100 กส. ขึ้นไป มีปุ่มบันทึกความคืบหน้า
+function isBig(j){ return j.status==='pending' && !isCvOnly(j) && (estOf(j)>=PROG_MIN || +j.progSacks>0); }
 function estOf(j){ const doz=(+j.totalDoz||0) || (+j.totalPairs||0)/12; return doz>0 ? Math.max(1, Math.ceil(doz/(+j.packPerSack||10))) : 0; }
 function j0(g){ return g.some(j=>j.status==='pending'&&!isCvOnly(j)); }
 
@@ -648,7 +669,7 @@ function jobCard(j, urgNo){
   if(j.status==='pending' && cvOnly){
     quick=`<button class="qb q-load" onclick="event.stopPropagation();loadOne('${id}')">🚚 จัดรถแล้ว</button>`;
   } else if(j.status==='pending'){
-    quick=(canUrg()?`<button class="qb ${j.priority>0?'q-urg-on':'q-urg'}" onclick="event.stopPropagation();urg('${id}',${j.priority>0?'false':'true'})">${j.priority>0?'⚡ ด่วน ✓':'⚡ ด่วน'}</button>`:'')+`<button class="qb q-pack" onclick="event.stopPropagation();openPack('${id}')">✅ แพ็คเสร็จ</button>`;
+    quick=(canUrg()?`<button class="qb ${j.priority>0?'q-urg-on':'q-urg'}" onclick="event.stopPropagation();urg('${id}',${j.priority>0?'false':'true'})">${j.priority>0?'⚡ ด่วน ✓':'⚡ ด่วน'}</button>`:'')+(isBig(j)?`<button class="qb q-prog" onclick="event.stopPropagation();openProg('${id}')">📈 คืบหน้า</button>`:'')+`<button class="qb q-pack" onclick="event.stopPropagation();openPack('${id}')">✅ แพ็คเสร็จ</button>`;
   } else if(j.status==='packed'){
     quick=`<button class="qb q-load" onclick="event.stopPropagation();loadOne('${id}')">🚚 จัดรถแล้ว</button>`;
     acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “แพ็คเสร็จ” กลับเป็นรอแพ็ค?')">↩ ยกเลิกแพ็คเสร็จ</button>`;
@@ -658,7 +679,7 @@ function jobCard(j, urgNo){
   acts+=`<button class="btn btn-del" onclick="act('deleteJob','${id}','ลบงานนี้ออกจากระบบ?')">🗑 ลบงาน</button>`;
   const meta=[ j.createdAt?`นำเข้า ${tShort(j.createdAt)} โดย ${esc(j.createdBy)}`:'',
     j.packedAt?`แพ็คเสร็จ ${tShort(j.packedAt)} โดย ${esc(j.packedBy)}`:'', j.loadedAt?`จัดรถ ${tShort(j.loadedAt)} โดย ${esc(j.loadedBy)}`:'', j.shippedAt?`<b style="color:var(--green)">✅ ส่งแล้ว ${esc(dayLabel(String(j.shippedAt).slice(0,10)))}${j.carrier?' · 🚚 '+esc(j.carrier):''}${j.shipDoc?' · '+esc(j.shipDoc):''}</b>`:''].filter(Boolean).join(' · ');
-  const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.shippedAt?`<span class="badge b-packed">✅ ส่งแล้ว · ${esc((j.carrier||'').split('\n')[0])}</span>`:(j.status==='loaded'?'<span class="badge b-urgent" style="background:#64748b">รอยืนยันส่ง</span>':''), j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.docDate?`<span title="วันที่ในเอกสาร">🗓 ${esc(shortDocDate(j.docDate))}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:''].filter(Boolean).join('');
+  const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.shippedAt?`<span class="badge b-packed">✅ ส่งแล้ว · ${esc((j.carrier||'').split('\n')[0])}</span>`:(j.status==='loaded'?'<span class="badge b-urgent" style="background:#64748b">รอยืนยันส่ง</span>':''), j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.docDate?`<span title="วันที่ในเอกสาร">🗓 ${esc(shortDocDate(j.docDate))}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:'', (j.createdAt&&dayKey(j.createdAt)===dayKey(new Date()))?`<span class="newb" title="นำเข้าระบบวันนี้">🆕 นำเข้า ${tShort(j.createdAt).slice(6)} ${esc(j.createdBy||'')}</span>`:''].filter(Boolean).join('');
   const right = cvOnly && j.status!=='loaded'
     ? `<div class="big" style="color:#7c4a1e">${fmt(cvPairsOf(j))}<small> คู่</small></div><div class="sm">👟 ผ้าใบ</div>`
     : j.status==='pending'
@@ -671,6 +692,7 @@ function jobCard(j, urgNo){
       <div class="jmain">
         <div class="jt"><span class="nm">${esc(j.custName)}</span></div>
         <div class="jsub">${sub}</div>
+        ${isBig(j)?progBar(j):''}
         <div class="csum">${colorSummary(cvOnly?j.items:foamItems(j))}${!cvOnly&&cvPairsOf(j)?`<span class="cs" style="color:#7c4a1e">👟 + ผ้าใบ <b>${fmt(cvPairsOf(j))}</b> คู่</span>`:''}</div>
       </div>
       <div class="jtot">${right}</div>
@@ -713,7 +735,15 @@ function matrix(items){
 /* ================== ACTIONS ================== */
 let CUR=null;
 function openPack(id){ CUR=JOBS.find(j=>j.id===id); pkSub.textContent=`${CUR.custName} · ${CUR.docNo||''}${CUR.sackName?' · กระสอบ “'+CUR.sackName+'”':''}`;
-  const est=estOf(CUR); pkN.value = est; pkHint.textContent = `คำนวณจาก ${fmt(CUR.totalDoz)} โหล ÷ ${CUR.packPerSack||10} โหล/กส. = ${est} กส. — ถ้าแพ็คได้ไม่ตรง กด − / + หรือพิมพ์แก้ได้`; pkNote.value=''; pkB.value=0; openM('mPack'); setTimeout(()=>pkN.select(),50); }
+  const est=estOf(CUR); pkN.value = Math.max(est, +CUR.progSacks||0); pkHint.textContent = `คำนวณจาก ${fmt(CUR.totalDoz)} โหล ÷ ${CUR.packPerSack||10} โหล/กส. = ${est} กส. — ถ้าแพ็คได้ไม่ตรง กด − / + หรือพิมพ์แก้ได้`; pkNote.value=''; pkB.value=0; openM('mPack'); setTimeout(()=>pkN.select(),50); }
+function progBar(j){ const est=estOf(j)||1, d=+j.progSacks||0, pc=Math.min(100,Math.round(d/est*100));
+  return `<div class="pbar"><span class="tr"><i style="width:${pc}%"></i></span>📈 ${fmt(d)} / ${fmt(est)} กส. (${pc}%)${j.progAt?` <small>อัปเดต ${tShort(j.progAt)} ${esc(j.progBy||'')}</small>`:' <small>ยังไม่อัปเดต</small>'}</div>`; }
+function openProg(id){ CUR=JOBS.find(j=>j.id===id); const est=estOf(CUR);
+  pgSub.textContent=`${CUR.custName} · ${CUR.docNo||''} · ทั้งหมด ≈${fmt(est)} กส.`; pgN.value=+CUR.progSacks||0;
+  pgHint.textContent='ใส่ยอดสะสมที่เสร็จแล้ว (ไม่ใช่เฉพาะรอบนี้) — แนะนำอัปเดตก่อนพักเที่ยง และก่อนเลิกงาน'; openM('mProg'); setTimeout(()=>pgN.select(),50); }
+function stepP(d){ pgN.value=Math.max(0,(+pgN.value||0)+d); }
+function confirmProg(){ const n=Math.max(0,+pgN.value||0), id=CUR.id; closeM('mProg');
+  quick(id, j=>Object.assign(j,{progSacks:n,progBy:USER?USER.name:'-',progAt:nowIso()}), {action:'setProgress',id,sacks:n}, `📈 บันทึกแล้ว ${fmt(n)} / ${fmt(estOf(CUR))} กส.`); }
 function stepS(d){ pkN.value=Math.max(0,(+pkN.value||0)+d); }
 function stepB(d){ pkB.value=Math.max(0,(+pkB.value||0)+d); }
 async function confirmPack(){ const n=Math.max(0,+pkN.value||0), bx=Math.max(0,+pkB.value||0); if(!(n>0||bx>0)) return toast('กรุณากรอกจำนวนกระสอบ หรือกล่อง');
