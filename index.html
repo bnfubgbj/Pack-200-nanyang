@@ -262,6 +262,14 @@ table.rep select{font:inherit;font-size:12.5px;max-width:340px;margin-top:3px}
       <input type="file" id="repFile" multiple accept=".xlsx,.xls" style="display:none" onchange="handleReportFiles(this.files);this.value=''">
     </div>
     <div id="recon"></div>
+    <div class="rep-card" style="margin-top:14px">
+      <div class="rep-title">🔎 ค้นหาประวัติการส่ง</div>
+      <div class="filters" style="margin-bottom:0">
+        <input id="sQ" placeholder="พิมพ์เลขบิล (IFO / TFV / AI / SO) หรือชื่อลูกค้า หรือชื่อขนส่ง" onkeydown="if(event.key==='Enter')searchShip()">
+        <button class="btn btn-load" id="sBtn" onclick="searchShip()">ค้นหา</button>
+      </div>
+      <div id="sRes"></div>
+    </div>
     <div class="filters" style="margin-top:14px">
       <label style="font-weight:600">ดูรายงานวันที่</label>
       <input type="date" id="rDate" style="flex:0;min-width:160px" onchange="loadReport()">
@@ -484,6 +492,10 @@ function demoApi(p){
   if(p.action==='addJobs'){ let a=0,s=0; p.jobs.forEach(j=>{ if(f(j.id)){s++;return;} jobs.push(Object.assign({},j,{status:'pending',priority:0,createdBy:u,createdAt:nowIso()})); a++; });
     line = a?`📥 แจ้งกลุ่มทีมแพ็ค: งานใหม่ ${a} งาน`:''; LS.set('pk_demo_jobs',jobs); demoLine(line); return {ok:true,added:a,skipped:s}; }
   if(p.action==='report') return {ok:true,rows:LS.get('pk_demo_rep',[]).filter(r=>r.date===p.date)};
+  if(p.action==='searchShip'){ const q=String(p.q).toLowerCase(), hit=v=>String(v||'').toLowerCase().includes(q);
+    const rows=LS.get('pk_demo_rep',[]).filter(r=>hit(r.docNo)||hit(r.custName)||hit(r.carrier)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+    const sj={}; rows.forEach(r=>{if(r.jobId)sj[r.jobId]=1;});
+    return {ok:true,rows,pending:jobs.filter(j=>!j.shippedAt&&!sj[j.id]&&(hit(j.docNo)||hit(j.id)||hit(j.custName))).map(j=>({id:j.id,docNo:j.docNo,custName:j.custName,status:j.status,packedAt:dayKey(j.packedAt),loadedAt:dayKey(j.loadedAt)}))}; }
   if(p.action==='importShipReport'){ let R=LS.get('pk_demo_rep',[]).filter(r=>!(r.date===p.date&&r.source===p.source)); R=R.concat(p.rows.map(r=>Object.assign({date:p.date,source:p.source},r))); LS.set('pk_demo_rep',R);
     let up=0; const by={}; p.rows.filter(r=>r.jobId).forEach(r=>(by[r.jobId]=by[r.jobId]||[]).push(r));
     Object.keys(by).forEach(id=>{ const j=f(id); if(!j) return; const rs=by[id]; Object.assign(j,{shippedAt:p.date,carrier:[...new Set(rs.map(r=>r.carrier))].join(' / '),shipDoc:[...new Set(rs.map(r=>r.docNo))].join(', '),priority:0});
@@ -995,6 +1007,25 @@ async function copyReport(){
   const q=v=>/[\t\n"]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':v;
   const txt=[repTitleText(),'',['#','Delivery Date','Invoice No','Customer / Description','Logistics Provider','กล่อง','กระสอบ'].join('\t'),...rows.map(r=>r.map(q).join('\t')),['รวมทั้งหมด','','','','',tb,ts].join('\t')].join('\n');
   try{ await navigator.clipboard.writeText(txt); toast('📋 คัดลอกแล้ว — วางใน Teams หรือ Excel ได้เลย'); }catch(e){ toast('คัดลอกไม่ได้ — ใช้ปุ่มดาวน์โหลด Excel แทน'); }
+}
+
+/* ===== ค้นหาประวัติการส่ง ===== */
+const ST_TH={pending:'📦 รอแพ็ค',packed:'✅ แพ็คเสร็จ รอจัดรถ',loaded:'🚚 จัดรถแล้ว รอยืนยันส่ง'};
+async function searchShip(){
+  const q=sQ.value.trim(); if(q.length<2) return toast('พิมพ์อย่างน้อย 2 ตัวอักษร');
+  sBtn.disabled=true; sRes.innerHTML='<div class="empty" style="padding:16px">⏳ กำลังค้นหา…</div>';
+  try{
+    const r=await callApi({action:'searchShip',q});
+    const rows=r.rows||[], pend=r.pending||[];
+    if(!rows.length && !pend.length){ sRes.innerHTML=`<div class="empty" style="padding:16px">ไม่พบ “${esc(q)}” ในรายงานส่งของ และในงานที่ยังไม่ส่ง</div>`; return; }
+    let html='';
+    if(rows.length) html+=`<div class="sum-line" style="margin-top:10px">✅ <b>ส่งแล้ว ${rows.length} รายการ</b></div>
+      <div class="mtx"><table class="rep"><tr><th>วันที่ส่ง</th><th>Invoice No</th><th style="text-align:left">Customer</th><th style="text-align:left">Logistics Provider</th><th>กล่อง</th><th>กระสอบ</th><th>ประเภท</th></tr>
+      ${rows.map(x=>`<tr><td style="white-space:nowrap"><a href="#" class="lnk" onclick="rDate.value='${esc(String(x.date).slice(0,10))}';loadReport();return false">${esc(dayLabel(String(x.date).slice(0,10)))}</a></td><td class="mono">${esc(x.docNo)}</td><td style="text-align:left">${esc(x.custName).slice(0,60)}</td><td style="text-align:left;white-space:pre-line">${esc(x.carrier)}</td><td class="q">${+x.boxes?fmt(x.boxes):''}</td><td class="q">${+x.sacks?fmt(x.sacks):''}</td><td>${x.source==='EXCEL'?'เอเยนต์':'ส่งตรง'}</td></tr>`).join('')}</table></div>`;
+    if(pend.length) html+=`<div class="note pr" style="margin-top:10px"><b>⏳ ยังไม่ส่ง ${pend.length} รายการ</b><br>${pend.map(j=>`• <span class="mono">${esc(j.docNo||j.id)}</span> ${esc(j.custName)} — ${ST_TH[j.status]||esc(j.status)}${j.loadedAt?' (จัดรถ '+esc(dayLabel(j.loadedAt))+')':j.packedAt?' (แพ็คเสร็จ '+esc(dayLabel(j.packedAt))+')':''}`).join('<br>')}</div>`;
+    sRes.innerHTML=html;
+  }catch(e){ sRes.innerHTML=`<div class="empty" style="padding:16px">⚠ ค้นหาไม่สำเร็จ: ${esc(e.message)}<br><small>(ถ้าเพิ่งอัปเดต ต้อง Deploy Apps Script V8 ก่อน)</small></div>`; }
+  finally{ sBtn.disabled=false; }
 }
 
 /* ================== SUMMARY ================== */
