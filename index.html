@@ -188,6 +188,12 @@ table.rep tr.man td{background:#fbfaf6}
 .sum-line{font-size:13.5px;margin-bottom:6px}
 .kpi.warn{outline:2px solid var(--red)}
 table.rep select{font:inherit;font-size:12.5px;max-width:340px;margin-top:3px}
+.rep-sec{margin-bottom:16px}
+.rep-sech{background:var(--sec);color:#fff;font-weight:700;padding:8px 12px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px}
+.rep-sech span{font-weight:500;font-size:13px;opacity:.9}
+.rep-sec .mtx{margin-top:0}
+.rep-grand{background:#f6f5f1;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-weight:700;display:flex;justify-content:space-between;flex-wrap:wrap}
+.rep-grand span{font-weight:500}
 @media print{.noprint{display:none}}
 @media print{header,.filters,.acts,.kpis,.demo,.tabs{display:none!important}.job{break-inside:avoid;border:1px solid #999}body{background:#fff}}
 </style>
@@ -975,37 +981,51 @@ async function loadReport(){
 }
 function repTitleText(){ const [y,m,d]=(rDate.value||'').split('-'); const sfx=rSrc.value==='PDF'?' (ส่งตรง)':rSrc.value==='EXCEL'?' (เอเยนต์)':'';
   return `รายงานการส่งสินค้าประจำวันที่ ${d}/${m}/${(+y)+543}${sfx}`; }
-function repItems(){ const src=rSrc.value; return REP.filter(r=>!src||r.source===src).map((r,i)=>Object.assign({},r,{n:i+1})); }
-function repData(){ return repItems().map(r=>[r.n, rDate.value, r.docNo, r.custName, r.carrier, +r.boxes||'', +r.sacks||'']); }
-function drawReport(){
-  repTitle.textContent=repTitleText();
-  const rows=repItems();
-  if(!rows.length){ repBody.innerHTML='<div class="empty">ยังไม่มีรายงานของวันนี้ — ลากไฟล์รายงานมาวางด้านบน</div>'; return; }
-  const tb=rows.reduce((s,r)=>s+(+r.boxes||0),0), ts=rows.reduce((s,r)=>s+(+r.sacks||0),0);
-  repBody.innerHTML=`<div class="mtx"><table class="rep"><tr><th>#</th><th>Invoice No</th><th style="text-align:left">Customer / Description</th><th style="text-align:left">Logistics Provider</th><th>กล่อง</th><th>กระสอบ</th><th>ในแอป</th></tr>
-    ${rows.map(r=>`<tr><td>${r.n}</td><td class="mono">${esc(r.docNo)}</td><td style="text-align:left">${esc(r.custName).slice(0,70)}</td><td style="text-align:left;white-space:pre-line">${esc(r.carrier)}</td><td class="q">${+r.boxes?fmt(r.boxes):''}</td><td class="q">${+r.sacks?fmt(r.sacks):''}</td><td>${r.jobId?'✅':'—'}</td></tr>`).join('')}
-    <tr><td colspan="4" class="t" style="text-align:left">รวมทั้งหมด</td><td class="t">${fmt(tb)}</td><td class="t">${fmt(ts)}</td><td class="t"></td></tr></table></div>`;
-}
 function drawWaiting(){
   const w=JOBS.filter(j=>j.status==='loaded'&&!j.shippedAt).sort((a,b)=>String(a.loadedAt).localeCompare(String(b.loadedAt)));
   waitBox.innerHTML = w.length ? `<div class="note pr" style="margin-top:12px"><b>🚚 จัดรถแล้ว รอยืนยันส่ง ${w.length} งาน</b> — จะยืนยันเมื่อลากรายงานที่มีเลขบิลเหล่านี้<br>${w.map(j=>`• ${esc(j.docNo||j.id)} ${esc(j.custName)} — จัดรถ ${tShort(j.loadedAt)}${dayKey(j.loadedAt)<dayKey(new Date())?' <b style="color:var(--red)">(ค้างข้ามวัน)</b>':''}`).join('<br>')}</div>` : '';
 }
+/* แยกตารางตามประเภท: ส่งตรง / เอเยนต์ (เลือก "ทุกประเภท" = แสดงทั้งสองตารางต่อกัน) */
+const REP_TYPES=[['PDF','ส่งตรง','#1f6f43'],['EXCEL','เอเยนต์','#2c5282']];
+function repTypes(){ return rSrc.value ? REP_TYPES.filter(t=>t[0]===rSrc.value) : REP_TYPES; }
+function repRowsOf(src){ return REP.filter(r=>r.source===src).map((r,i)=>[i+1, rDate.value, r.docNo, r.custName, r.carrier, +r.boxes||'', +r.sacks||'', r.jobId]); }
+function repTitleOf(src){ const [y,m,d]=(rDate.value||'').split('-'); return `รายงานการส่งสินค้าประจำวันที่ ${d}/${m}/${(+y)+543} (${src==='PDF'?'ส่งตรง':'เอเยนต์'})`; }
+function repTitleText(){ const [y,m,d]=(rDate.value||'').split('-'); return `รายงานการส่งสินค้าประจำวันที่ ${d}/${m}/${(+y)+543}${rSrc.value?(rSrc.value==='PDF'?' (ส่งตรง)':' (เอเยนต์)'):''}`; }
+const sumCol=(rows,c)=>rows.reduce((s,r)=>s+(+r[c]||0),0);
+function repData(){ return repTypes().flatMap(([src])=>repRowsOf(src)); }
+function drawReport(){
+  repTitle.textContent=repTitleText();
+  const parts=repTypes().map(([src,label,color])=>({src,label,color,rows:repRowsOf(src)})).filter(p=>p.rows.length);
+  if(!parts.length){ repBody.innerHTML='<div class="empty">ยังไม่มีรายงานของวันนี้ — ลากไฟล์รายงานมาวางด้านบน</div>'; return; }
+  let gb=0, gs=0;
+  const html=parts.map(p=>{ const tb=sumCol(p.rows,5), ts=sumCol(p.rows,6); gb+=tb; gs+=ts;
+    return `<div class="rep-sec" style="--sec:${p.color}"><div class="rep-sech">${p.src==='PDF'?'📄':'🏪'} ${p.label} <span>${p.rows.length} บิล · ${fmt(tb)} กล่อง · ${fmt(ts)} กระสอบ</span></div>
+    <div class="mtx"><table class="rep"><tr><th>#</th><th>Invoice No</th><th style="text-align:left">Customer / Description</th><th style="text-align:left">Logistics Provider</th><th>กล่อง</th><th>กระสอบ</th><th>ในแอป</th></tr>
+    ${p.rows.map(r=>`<tr><td>${r[0]}</td><td class="mono">${esc(r[2])}</td><td style="text-align:left">${esc(r[3]).slice(0,70)}</td><td style="text-align:left;white-space:pre-line">${esc(r[4])}</td><td class="q">${r[5]?fmt(r[5]):''}</td><td class="q">${r[6]?fmt(r[6]):''}</td><td>${r[7]?'✅':'—'}</td></tr>`).join('')}
+    <tr><td colspan="4" class="t" style="text-align:left">รวม${p.label}</td><td class="t">${fmt(tb)}</td><td class="t">${fmt(ts)}</td><td class="t"></td></tr></table></div></div>`; }).join('');
+  repBody.innerHTML = html + (parts.length>1?`<div class="rep-grand">รวมทั้งหมด (ส่งตรง + เอเยนต์) <span>${parts.reduce((s,p)=>s+p.rows.length,0)} บิล · <b>${fmt(gb)}</b> กล่อง · <b>${fmt(gs)}</b> กระสอบ</span></div>`:'');
+}
 function exportReport(){
-  const rows=repData(); if(!rows.length) return toast('ไม่มีข้อมูลในวันที่เลือก');
-  const tb=rows.reduce((s,r)=>s+(+r[5]||0),0), ts=rows.reduce((s,r)=>s+(+r[6]||0),0);
-  const aoa=[[repTitleText()],[],[],['#','Delivery Date','Invoice No','Customer / Description','Logistics Provider','กล่อง','กระสอบ'],...rows,['รวมทั้งหมด','','','','',tb,ts]];
-  const ws=XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols']=[{wch:5},{wch:13},{wch:16},{wch:42},{wch:34},{wch:8},{wch:8}];
-  ws['!merges']=[{s:{r:0,c:0},e:{r:2,c:6}},{s:{r:aoa.length-1,c:0},e:{r:aoa.length-1,c:4}}];
-  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'รายงานส่งของ');
+  const parts=repTypes().map(([src])=>({src,rows:repRowsOf(src)})).filter(p=>p.rows.length);
+  if(!parts.length) return toast('ไม่มีข้อมูลในวันที่เลือก');
+  const wb=XLSX.utils.book_new();
+  parts.forEach(p=>{
+    const body=p.rows.map(r=>{ const x=r.slice(0,7); x[4]=String(x[4]).replace(/ Tel:/,'\nTel:'); return x; });
+    const aoa=[[repTitleOf(p.src)],[],[],['#','Delivery Date','Invoice No','Customer / Description','Logistics Provider','กล่อง','กระสอบ'],...body,['รวมทั้งหมด','','','','',sumCol(p.rows,5),sumCol(p.rows,6)]];
+    const ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols']=[{wch:5},{wch:13},{wch:16},{wch:42},{wch:34},{wch:8},{wch:8}];
+    ws['!merges']=[{s:{r:0,c:0},e:{r:2,c:6}},{s:{r:aoa.length-1,c:0},e:{r:aoa.length-1,c:4}}];
+    XLSX.utils.book_append_sheet(wb,ws,p.src==='PDF'?'ส่งตรง':'เอเยนต์');
+  });
   const [y,m,d]=rDate.value.split('-');
   XLSX.writeFile(wb,`รายงานการส่งสินค้า_${d}-${m}-${(+y)+543}${rSrc.value==='PDF'?'_ส่งตรง':rSrc.value==='EXCEL'?'_เอเยนต์':''}.xlsx`);
 }
 async function copyReport(){
-  const rows=repData(); if(!rows.length) return toast('ไม่มีข้อมูลในวันที่เลือก');
-  const tb=rows.reduce((s,r)=>s+(+r[5]||0),0), ts=rows.reduce((s,r)=>s+(+r[6]||0),0);
+  const parts=repTypes().map(([src])=>({src,rows:repRowsOf(src)})).filter(p=>p.rows.length);
+  if(!parts.length) return toast('ไม่มีข้อมูลในวันที่เลือก');
   const q=v=>/[\t\n"]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':v;
-  const txt=[repTitleText(),'',['#','Delivery Date','Invoice No','Customer / Description','Logistics Provider','กล่อง','กระสอบ'].join('\t'),...rows.map(r=>r.map(q).join('\t')),['รวมทั้งหมด','','','','',tb,ts].join('\t')].join('\n');
+  const txt=parts.map(p=>[repTitleOf(p.src),'',['#','Delivery Date','Invoice No','Customer / Description','Logistics Provider','กล่อง','กระสอบ'].join('\t'),
+    ...p.rows.map(r=>r.slice(0,7).map(q).join('\t')),['รวมทั้งหมด','','','','',sumCol(p.rows,5),sumCol(p.rows,6)].join('\t')].join('\n')).join('\n\n');
   try{ await navigator.clipboard.writeText(txt); toast('📋 คัดลอกแล้ว — วางใน Teams หรือ Excel ได้เลย'); }catch(e){ toast('คัดลอกไม่ได้ — ใช้ปุ่มดาวน์โหลด Excel แทน'); }
 }
 
