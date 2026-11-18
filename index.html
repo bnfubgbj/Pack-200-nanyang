@@ -652,7 +652,7 @@ function shortDocDate(s){ return String(s).replace('มกราคม','ม.ค
 /* จำนวนกระสอบโดยประมาณ = ยอดโหลทั้งหมด ÷ โหลต่อกระสอบ (ปัดขึ้น, อย่างน้อย 1) — ใช้กับทุกรุ่น */
 const PROG_MIN=100; // งานตั้งแต่ 100 กส. ขึ้นไป มีปุ่มบันทึกความคืบหน้า
 function isBig(j){ return j.status==='pending' && !isCvOnly(j) && (estOf(j)>=PROG_MIN || +j.progSacks>0); }
-function estOf(j){ const doz=(+j.totalDoz||0) || (+j.totalPairs||0)/12; return doz>0 ? Math.max(1, Math.ceil(doz/(+j.packPerSack||10))) : 0; }
+function estOf(j){ const hasIt=(j.items||[]).length>0; const doz = hasIt ? sackItems(j).reduce((s,i)=>s+(+i.qty||0),0)/12 : ((+j.totalDoz||0) || (+j.totalPairs||0)/12); return doz>0 ? Math.max(1, Math.ceil(doz/(+j.packPerSack||10))) : 0; }
 function j0(g){ return g.some(j=>j.status==='pending'&&!isCvOnly(j)); }
 
 function colorSummary(items){
@@ -683,7 +683,9 @@ function jobCard(j, urgNo){
   const right = cvOnly && j.status!=='loaded'
     ? `<div class="big" style="color:#7c4a1e">${fmt(cvPairsOf(j))}<small> คู่</small></div><div class="sm">👟 ผ้าใบ</div>`
     : j.status==='pending'
-    ? `<div class="big">${fmt(estOf(j))}<small> กส.</small></div><div class="sm">${fmt(j.totalDoz)} โหล</div>`
+    ? (estOf(j)>0 || !boxesOf(j)
+        ? `<div class="big">${fmt(estOf(j))}<small> กส.</small></div><div class="sm">${boxesOf(j)?`<b style="color:#7c3aed">+ ${fmt(boxesOf(j))} กล่อง</b> · `:''}${fmt(j.totalDoz)} โหล</div>`
+        : `<div class="big" style="color:#7c3aed">${fmt(boxesOf(j))}<small> กล่อง</small></div><div class="sm">${fmt(j.totalDoz)} โหล</div>`)
     : `<div class="big" style="color:var(--green)">${+j.packedSacks||!+j.packedBoxes?fmt(j.packedSacks)+'<small> กส.</small>':fmt(j.packedBoxes)+'<small> กล่อง</small>'}</div><div class="sm">${+j.packedSacks&&+j.packedBoxes?'+ '+fmt(j.packedBoxes)+' กล่อง · ':''}${fmt(j.totalDoz)} โหล</div>`;
   return `<div class="job st-${j.status} ${urgent?'urgent':''} ${open?'open':''}">
     ${urgent?`<div class="uband"><b>⚡ งานด่วน #${urgNo} — แพ็คก่อน<em class="srcTag">${j.source==='PDF'?'🚚 ส่งตรง':'🏪 เอเยนต์'}</em></b> <span>ติดโดย ${esc(j.priorityBy)} ${tShort(j.priorityAt)}</span></div>`:''}
@@ -693,7 +695,7 @@ function jobCard(j, urgNo){
         <div class="jt"><span class="nm">${esc(j.custName)}</span></div>
         <div class="jsub">${sub}</div>
         ${isBig(j)?progBar(j):''}
-        <div class="csum">${colorSummary(cvOnly?j.items:foamItems(j))}${!cvOnly&&cvPairsOf(j)?`<span class="cs" style="color:#7c4a1e">👟 + ผ้าใบ <b>${fmt(cvPairsOf(j))}</b> คู่</span>`:''}</div>
+        <div class="csum">${colorSummary(cvOnly?j.items:sackItems(j))}${!cvOnly&&boxPairsOf(j)?`<span class="cs" style="color:#7c3aed">📦 ${[...new Set(boxItems(j).map(i=>i.model.replace('ฟองน้ำ ','')))].join('/')} <b>${fmt(boxPairsOf(j))}</b> คู่ ≈ <b>${fmt(boxesOf(j))}</b> กล่อง</span>`:''}${!cvOnly&&cvPairsOf(j)?`<span class="cs" style="color:#7c4a1e">👟 + ผ้าใบ <b>${fmt(cvPairsOf(j))}</b> คู่</span>`:''}</div>
       </div>
       <div class="jtot">${right}</div>
       ${quick?`<div class="qwrap">${quick}</div>`:''}
@@ -701,7 +703,7 @@ function jobCard(j, urgNo){
     ${open?`<div class="jbody">
       ${j.note?`<div class="note">📝 ${esc(j.note)}</div>`:''}
       ${j.packNote?`<div class="note pk">📦 หมายเหตุแพ็ค: ${esc(j.packNote)}</div>`:''}
-      ${cvOnly?matrix(j.items):matrix(foamItems(j))}${!cvOnly&&cvPairsOf(j)?`<div class="mcap" style="color:#7c4a1e">👟 ผ้าใบในบิลเดียวกัน — ไม่ต้องแพ็คกระสอบ</div>${matrix(cvItems(j))}`:''}
+      ${cvOnly?matrix(j.items):(sackItems(j).length?matrix(sackItems(j)):'')}${!cvOnly&&boxPairsOf(j)?`<div class="mcap" style="color:#7c3aed">📦 ฟองน้ำ 212/213 — ใส่กล่อง กล่องละ ${BOX_PAIRS} คู่ (ไม่ใส่กระสอบ) ≈ ${fmt(boxesOf(j))} กล่อง</div>${matrix(boxItems(j))}`:''}${!cvOnly&&cvPairsOf(j)?`<div class="mcap" style="color:#7c4a1e">👟 ผ้าใบในบิลเดียวกัน — ไม่ต้องแพ็คกระสอบ</div>${matrix(cvItems(j))}`:''}
       ${acts?`<div class="acts">${acts}</div>`:''}
       <div class="meta">${meta} · <span class="badge b-src">${j.source==='PDF'?'ส่งตรง PDF':'เอเยนต์ Excel'}</span>${j.custCode?' · รหัสลูกค้า '+esc(j.custCode):''}</div>
     </div>`:''}
@@ -735,7 +737,7 @@ function matrix(items){
 /* ================== ACTIONS ================== */
 let CUR=null;
 function openPack(id){ CUR=JOBS.find(j=>j.id===id); pkSub.textContent=`${CUR.custName} · ${CUR.docNo||''}${CUR.sackName?' · กระสอบ “'+CUR.sackName+'”':''}`;
-  const est=estOf(CUR); pkN.value = Math.max(est, +CUR.progSacks||0); pkHint.textContent = `คำนวณจาก ${fmt(CUR.totalDoz)} โหล ÷ ${CUR.packPerSack||10} โหล/กส. = ${est} กส. — ถ้าแพ็คได้ไม่ตรง กด − / + หรือพิมพ์แก้ได้`; pkNote.value=''; pkB.value=0; openM('mPack'); setTimeout(()=>pkN.select(),50); }
+  const est=estOf(CUR); pkN.value = Math.max(est, +CUR.progSacks||0); pkHint.textContent = `คำนวณจาก ${fmt(CUR.totalDoz)} โหล ÷ ${CUR.packPerSack||10} โหล/กส. = ${est} กส. — ถ้าแพ็คได้ไม่ตรง กด − / + หรือพิมพ์แก้ได้`; pkNote.value=''; pkB.value=boxesOf(CUR); if(boxesOf(CUR)) pkHint.textContent = (est?`กระสอบ ≈${est} กส. · `:'')+`ฟองน้ำ 212/213 ${fmt(boxPairsOf(CUR))} คู่ ÷ ${BOX_PAIRS} = ${boxesOf(CUR)} กล่อง — แก้ได้ถ้าแพ็คไม่ตรง`; openM('mPack'); setTimeout(()=>pkN.select(),50); }
 function progBar(j){ const est=estOf(j)||1, d=+j.progSacks||0, pc=Math.min(100,Math.round(d/est*100));
   return `<div class="pbar"><span class="tr"><i style="width:${pc}%"></i></span>📈 ${fmt(d)} / ${fmt(est)} กส. (${pc}%)${j.progAt?` <small>อัปเดต ${tShort(j.progAt)} ${esc(j.progBy||'')}</small>`:' <small>ยังไม่อัปเดต</small>'}</div>`; }
 function openProg(id){ CUR=JOBS.find(j=>j.id===id); const est=estOf(CUR);
@@ -888,6 +890,12 @@ const isCvItem = i => i.cat==='ผ้าใบ' || /^ผ้าใบ/.test(i.mod
 const foamItems = j => (j.items||[]).filter(i=>!isCvItem(i));
 const cvItems = j => (j.items||[]).filter(isCvItem);
 const cvPairsOf = j => cvItems(j).reduce((s,i)=>s+(+i.qty||0),0);
+const BOX_PAIRS=24; // ฟองน้ำ 212 / 213 ใส่กล่อง กล่องละ 24 คู่ (ไม่ใส่กระสอบ)
+const isBoxItem = i => !isCvItem(i) && /ฟองน้ำ\s*21[23]\b/.test(i.model||'');
+const boxItems = j => (j.items||[]).filter(isBoxItem);
+const sackItems = j => foamItems(j).filter(i=>!isBoxItem(i));
+const boxPairsOf = j => boxItems(j).reduce((s,i)=>s+(+i.qty||0),0);
+const boxesOf = j => { const p=boxPairsOf(j); return p>0?Math.ceil(p/BOX_PAIRS):0; };
 const isCvOnly = j => (j.items||[]).length>0 && foamItems(j).length===0;
 function finalize(j){
   j.totalPairs=foamItems(j).reduce((s,i)=>s+(+i.qty||0),0);
