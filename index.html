@@ -43,6 +43,11 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .filters input,.filters select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fff}
 .filters input{flex:1;min-width:180px}
 .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}
+.srcbar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.sb{border:2px solid var(--line);background:#fff;border-radius:12px;padding:10px;font:inherit;font-size:15px;font-weight:600;cursor:pointer;color:var(--navy)}
+.sb b{display:inline-block;margin-left:6px;font-size:12.5px;font-weight:600;color:var(--amber)}
+.sb.on{background:var(--navy);color:#fff;border-color:var(--navy)} .sb.on b{color:#ffd27a}
+.srcTag{display:inline-block;font-style:normal;font-size:11.5px;font-weight:700;margin-left:8px;padding:1px 8px;border-radius:999px;margin-left:6px;background:#fff;color:#b45309}
 .chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
 .list{display:grid;gap:10px}
 .job{background:var(--card);border-radius:var(--r);border:1px solid var(--line);border-left:6px solid var(--navy2);overflow:hidden}
@@ -228,10 +233,15 @@ table.rep select{font:inherit;font-size:12.5px;max-width:340px;margin-top:3px}
       <div class="kpi k3" data-f="packed" onclick="setStatus('packed')"><div class="l">✅ แพ็คเสร็จ รอส่ง</div><div class="v" id="kK">0</div><div class="s" id="kKs">-</div></div>
       <div class="kpi k4" data-f="loaded" onclick="setStatus('loaded')"><div class="l">🚚 จัดรถแล้ว รอยืนยันส่ง</div><div class="v" id="kL">0</div><div class="s" id="kLs">-</div></div>
     </div>
+    <div class="srcbar">
+      <button class="sb on" data-src="" onclick="setSrc('')">ทั้งหมด <b id="sbA"></b></button>
+      <button class="sb" data-src="EXCEL" onclick="setSrc('EXCEL')">🏪 เอเยนต์ <b id="sbE"></b></button>
+      <button class="sb" data-src="PDF" onclick="setSrc('PDF')">🚚 ส่งตรง <b id="sbP"></b></button>
+    </div>
     <div class="filters">
       <button class="chip" data-s="active" onclick="setStatus('active')">ล่าสุด</button>
       <button class="chip" data-s="all" onclick="setStatus('all')">ทั้งหมด</button>
-      <select id="fSrc" onchange="render()"><option value="">ทุกแหล่ง</option><option value="EXCEL">เอเยนต์ (Excel)</option><option value="PDF">ส่งตรง (PDF)</option></select>
+      <select id="fSrc" style="display:none" onchange="render()"><option value="">ทุกแหล่ง</option><option value="EXCEL">เอเยนต์ (Excel)</option><option value="PDF">ส่งตรง (PDF)</option></select>
       <select id="fTrip" onchange="render()"><option value="">ทุกเที่ยว</option></select>
       <select id="fDay" onchange="if(this.value==='pick'){fDate.style.display='';fDate.showPicker&&fDate.showPicker();}else{fDate.style.display='none';}render()">
         <option value="">ทุกวัน</option><option value="today">วันนี้</option><option value="tmr">พรุ่งนี้</option><option value="yday">เมื่อวาน</option><option value="pick">เลือกวันที่…</option></select>
@@ -543,11 +553,18 @@ function normJob(j){
 function isToday(s){ if(!s) return false; const d=new Date(s), n=new Date(); return d.toDateString()===n.toDateString(); }
 function setStatus(s){ STATUS = s; render(); }
 
+function setSrc(v){ fSrc.value=v; try{localStorage.setItem('pk_src',v);}catch(e){} render(); }
+try{ const _s=localStorage.getItem('pk_src'); if(_s) document.getElementById('fSrc').value=_s; }catch(e){}
 function render(){
   const pend = JOBS.filter(j=>j.status==='pending'&&!isCvOnly(j)), urg = pend.filter(j=>j.priority>0),
         pk = JOBS.filter(j=>j.status==='packed'), ld = JOBS.filter(j=>j.status==='loaded'&&!j.shippedAt);
   const sum = (a,k)=>a.reduce((s,j)=>s+(+j[k]||0),0);
   kP.textContent=pend.length; kPs.textContent=fmt(sum(pend,'totalDoz'))+' โหล · ≈'+fmt(pend.reduce((s,j)=>s+estOf(j),0))+' กส.';
+  { const uE=urg.filter(j=>j.source==='EXCEL').length, uP=urg.filter(j=>j.source==='PDF').length;
+    const pE=pend.filter(j=>j.source==='EXCEL').length, pP=pend.filter(j=>j.source==='PDF').length;
+    document.querySelector('.kpi.k2 .s').textContent = urg.length ? `เอเยนต์ ${uE} · ส่งตรง ${uP}` : 'รอแพ็ค';
+    sbA.textContent = urg.length?`⚡${urg.length}`:''; sbE.textContent = `${pE} งาน`+(uE?` · ⚡${uE}`:''); sbP.textContent = `${pP} งาน`+(uP?` · ⚡${uP}`:'');
+    document.querySelectorAll('.sb').forEach(b=>b.classList.toggle('on',b.dataset.src===fSrc.value)); }
   kU.textContent=urg.length; kK.textContent=pk.length; kKs.textContent=fmt(sum(pk,'packedSacks'))+' กส.';
   kL.textContent=ld.length; const oldL=ld.filter(j=>dayKey(j.loadedAt)<dayKey(new Date())).length;
   kLs.innerHTML= oldL?`<b style="color:var(--red)">⚠ ค้างข้ามวัน ${oldL} งาน</b>`:'ยืนยันด้วยรายงานตอนเย็น';
@@ -577,7 +594,7 @@ function render(){
   const urgRank = {}; pend.filter(j=>j.priority>0).sort((a,b)=>a.priority-b.priority).forEach((j,i)=>urgRank[j.id]=i+1);
   // ---- group: ด่วน / เที่ยว / ส่งตรง / แพ็คเสร็จ / ขึ้นรถแล้ว ----
   const gKey = j => j.status==='loaded'?(j.shippedAt?'z2|✅ ส่งแล้ว (ยืนยันจากรายงาน)':'z1|🚚 จัดรถแล้ว — รอยืนยันส่ง') : j.status==='packed'?'y|✅ แพ็คเสร็จ — รอขึ้นรถ'
-    : isCvOnly(j)?'w|👟 ผ้าใบ — ไม่ต้องแพ็คกระสอบ (รอจัดรถ)' : j.priority>0?'a|⚡ งานด่วน — แพ็คก่อน' : j.trip?('b|'+String(j.trip).padStart(3,'0')+'|🚚 เที่ยว '+j.trip) : 'x|📄 งานส่งตรง (PDF)';
+    : isCvOnly(j)?'w|👟 ผ้าใบ — ไม่ต้องแพ็คกระสอบ (รอจัดรถ)' : j.priority>0?(j.source==='PDF'?'a2|⚡ งานด่วน ส่งตรง — แพ็คก่อน':'a1|⚡ งานด่วน เอเยนต์ — แพ็คก่อน') : j.trip?('b|'+String(j.trip).padStart(3,'0')+'|🚚 เที่ยว '+j.trip) : 'x|📄 งานส่งตรง (PDF)';
   const today=dayKey(new Date());
   const byDay={}; L.forEach(j=>{const d=jobDay(j)||'0000-00-00';(byDay[d]=byDay[d]||[]).push(j);});
   const days=Object.keys(byDay).sort(); // เก่า → ใหม่ (งานค้างขึ้นก่อน)
@@ -648,7 +665,7 @@ function jobCard(j, urgNo){
     ? `<div class="big">${fmt(estOf(j))}<small> กส.</small></div><div class="sm">${fmt(j.totalDoz)} โหล</div>`
     : `<div class="big" style="color:var(--green)">${+j.packedSacks||!+j.packedBoxes?fmt(j.packedSacks)+'<small> กส.</small>':fmt(j.packedBoxes)+'<small> กล่อง</small>'}</div><div class="sm">${+j.packedSacks&&+j.packedBoxes?'+ '+fmt(j.packedBoxes)+' กล่อง · ':''}${fmt(j.totalDoz)} โหล</div>`;
   return `<div class="job st-${j.status} ${urgent?'urgent':''} ${open?'open':''}">
-    ${urgent?`<div class="uband">⚡ งานด่วน #${urgNo} — แพ็คก่อน <span>ติดโดย ${esc(j.priorityBy)} ${tShort(j.priorityAt)}</span></div>`:''}
+    ${urgent?`<div class="uband"><b>⚡ งานด่วน #${urgNo} — แพ็คก่อน<em class="srcTag">${j.source==='PDF'?'🚚 ส่งตรง':'🏪 เอเยนต์'}</em></b> <span>ติดโดย ${esc(j.priorityBy)} ${tShort(j.priorityAt)}</span></div>`:''}
     <div class="jh" onclick="toggle('${id}')">
       <div class="chev">${open?'▾':'▸'}</div>
       <div class="jmain">
