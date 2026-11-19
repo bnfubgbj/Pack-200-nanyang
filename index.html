@@ -708,7 +708,7 @@ function jobCard(j, urgNo){
     quick = canLoad() ? `<button class="qb q-load" onclick="event.stopPropagation();loadOne('${id}')">🚚 จัดรถแล้ว</button>` : stChip('✅ แพ็คเสร็จ','sc-pack');
     if(canPack()) acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “แพ็คเสร็จ” กลับเป็นรอแพ็ค?')">↩ ยกเลิกแพ็คเสร็จ</button>`;
   } else {
-    quick = j.shippedAt ? `<span class="stchip sc-ship">✅ ส่งแล้ว${j.carrier?`<small>🚚 ${esc(String(j.carrier).split('\n')[0])}</small>`:''}</span>` : stChip('🚚 จัดรถแล้ว · รอยืนยันส่ง','sc-load');
+    quick = j.shippedAt ? `<span class="stchip sc-ship">✅ ส่งแล้ว ${shipD(j.shippedAt)}${j.carrier?`<small>🚚 ${esc(String(j.carrier).split('\n')[0])}</small>`:''}</span>` : `<span class="stchip sc-load">🚚 จัดรถแล้ว · รอยืนยันส่ง${j.loadedAt?`<small style="display:block;font-size:12px;font-weight:600">จัดรถ ${tShort(j.loadedAt)}</small>`:''}</span>`;
     if(canLoad()) acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “จัดรถแล้ว” กลับเป็นแพ็คเสร็จ?')">↩ ยกเลิกจัดรถ</button>`;
   }
   if(canDel()) acts+=`<button class="btn btn-del" onclick="act('deleteJob','${id}','ลบงานนี้ออกจากระบบ?')">🗑 ลบงาน</button>`;
@@ -747,6 +747,7 @@ function jobCard(j, urgNo){
 const OPEN=new Set(); let ALLOPEN=false;
 function toggle(id){ if(ALLOPEN){ALLOPEN=false; JOBS.forEach(j=>OPEN.add(j.id));} OPEN.has(id)?OPEN.delete(id):OPEN.add(id); render(); }
 function toggleAll(){ ALLOPEN=!ALLOPEN; if(!ALLOPEN) OPEN.clear(); document.getElementById('btnAll').textContent=ALLOPEN?'ย่อทั้งหมด':'กางทั้งหมด'; render(); }
+function shipD(v){ const k=String(v||'').slice(0,10); const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(k); if(!m){ const d=new Date(v); if(isNaN(d)) return esc(String(v||'')); return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getFullYear()+543).slice(2)}`; } return `${m[3]}/${m[2]}/${String(+m[1]+543).slice(2)}`; }
 function tShort(s){ if(!s) return ''; const d=new Date(s); if(isNaN(d)) return s; const p=n=>String(n).padStart(2,'0'); return `${p(d.getDate())}/${p(d.getMonth()+1)} ${p(d.getHours())}:${p(d.getMinutes())}`; }
 function dot(c){ const h=COLOR_HEX[c]||'#ddd'; return `<span class="dot" style="background:${h}"></span>`; }
 function sizeSort(a,b){ return parseFloat(a)-parseFloat(b); }
