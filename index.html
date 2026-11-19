@@ -151,6 +151,8 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .csum b{color:var(--ink)}
 .jtot .big{font-size:18px!important}.jtot small{font-size:12px;font-weight:500}
 .qwrap{flex-shrink:0}
+.stchip{display:inline-block;font-size:13px;font-weight:700;padding:8px 14px;border-radius:9px;white-space:nowrap;text-align:center}
+.sc-wait{background:#f1f5f9;color:#475569}.sc-pack{background:#e7f6ec;color:#1f7a3a}.sc-load{background:#e8eef7;color:#1e3a5f}
 .qb{font:inherit;font-weight:600;font-size:13px;border:0;border-radius:9px;padding:8px 12px;cursor:pointer;white-space:nowrap}
 .q-pack{background:var(--green);color:#fff}.q-urg{background:#fff;color:var(--amber);border:1.5px solid var(--amber)}.q-load{background:var(--navy2);color:#fff}
 .job.open{box-shadow:0 2px 10px #0001}
@@ -496,6 +498,14 @@ let USER = LS.get('pk_auth', null);   // {name, pass}
 /* สิทธิ์ติดด่วน: ใช้ค่าจาก Apps Script (ชีต Users คอลัมน์ ติดด่วนได้) ถ้ายังไม่ได้รับ ใช้ค่าเริ่มต้น ต่อ/ชัย */
 const URGENT_DEFAULT = ['ต่อ','ชัย'];
 const ALERT_DEFAULT = ['ป้อง'];   // คนที่เปิดเสียงเตือนงานด่วนให้อัตโนมัติ (เปิด/ปิดเองได้ที่ปุ่ม 🔔)
+/* สิทธิ์ปุ่ม — คนอื่นเห็นเป็นสถานะเฉย ๆ */
+const PACKERS=['ป้อง','ต่อ'];          // กด ✅ แพ็คเสร็จ / 📈 คืบหน้า / ยกเลิกแพ็ค
+const LOADERS=['ชัย','ต่อ'];           // กด 🚚 จัดรถแล้ว / ยกเลิกจัดรถ
+const DELETERS=['ต่อ','สุกี้','ฟ้า'];    // ลบงาน (คนนำเข้าไฟล์)
+const canPack=()=>!!USER&&PACKERS.includes(USER.name);
+const canLoad=()=>!!USER&&LOADERS.includes(USER.name);
+const canDel =()=>!!USER&&DELETERS.includes(USER.name);
+const stChip=(t,c)=>`<span class="stchip ${c}">${t}</span>`;
 function canUrg(){ if(!USER) return false; return typeof USER.canUrgent==='boolean' ? USER.canUrgent : URGENT_DEFAULT.includes(USER.name); }
 const DEMO_USERS = {'สุกี้':'suki_123','ชัย':'chai_123','ป้อง':'pong_123','ฟ้า':'fah_123','ต่อ':'tor_123'};
 const api = () => (LS.get('pk_api', '') || DEFAULT_API).trim();
@@ -628,7 +638,7 @@ function render(){
     return head + Object.keys(groups).sort().map(k=>{
       const g=groups[k], label=k.split('|').pop();
       const doz=g.reduce((s,j)=>s+(+j.totalDoz||0),0), sk=g.reduce((s,j)=>s+(+(j.status==='pending'?(isCvOnly(j)?0:estOf(j)):j.packedSacks)||0),0);
-      const bulk = (k.startsWith('y|')||k.startsWith('w|')) && g.length>1 ? `<button class="qb q-load bulk" onclick="loadAll('${g.map(j=>esc(j.id)).join(',')}')">🚚 จัดรถแล้วทั้งหมด ${g.length} งาน</button>` : '';
+      const bulk = canLoad() && (k.startsWith('y|')||k.startsWith('w|')) && g.length>1 ? `<button class="qb q-load bulk" onclick="loadAll('${g.map(j=>esc(j.id)).join(',')}')">🚚 จัดรถแล้วทั้งหมด ${g.length} งาน</button>` : '';
       const gsum = k.startsWith('w|') ? `${g.length} งาน · ${fmt(g.reduce((s,j)=>s+cvPairsOf(j),0))} คู่ผ้าใบ` : `${g.length} งาน · ${fmt(doz)} โหล · ${j0(g)?'≈':''}${fmt(sk)} กส.`;
       return `<div class="grp"><span>${esc(label)}</span><span class="gs">${gsum} ${bulk}</span></div>`+g.map(j=>jobCard(j,urgRank[j.id])).join('');
     }).join('');
@@ -685,17 +695,21 @@ function jobCard(j, urgNo){
   const id = esc(j.id);
   let acts='', quick='';
   const cvOnly=isCvOnly(j);
+  const uBtn = canUrg()?`<button class="qb ${j.priority>0?'q-urg-on':'q-urg'}" onclick="event.stopPropagation();urg('${id}',${j.priority>0?'false':'true'})">${j.priority>0?'⚡ ด่วน ✓':'⚡ ด่วน'}</button>`:'';
   if(j.status==='pending' && cvOnly){
-    quick=`<button class="qb q-load" onclick="event.stopPropagation();loadOne('${id}')">🚚 จัดรถแล้ว</button>`;
+    quick = canLoad() ? `<button class="qb q-load" onclick="event.stopPropagation();loadOne('${id}')">🚚 จัดรถแล้ว</button>` : stChip('👟 รอจัดรถ','sc-wait');
   } else if(j.status==='pending'){
-    quick=(canUrg()?`<button class="qb ${j.priority>0?'q-urg-on':'q-urg'}" onclick="event.stopPropagation();urg('${id}',${j.priority>0?'false':'true'})">${j.priority>0?'⚡ ด่วน ✓':'⚡ ด่วน'}</button>`:'')+(isBig(j)?`<button class="qb q-prog" onclick="event.stopPropagation();openProg('${id}')">📈 คืบหน้า</button>`:'')+`<button class="qb q-pack" onclick="event.stopPropagation();openPack('${id}')">✅ แพ็คเสร็จ</button>`;
+    quick = uBtn + (canPack()
+      ? (isBig(j)?`<button class="qb q-prog" onclick="event.stopPropagation();openProg('${id}')">📈 คืบหน้า</button>`:'')+`<button class="qb q-pack" onclick="event.stopPropagation();openPack('${id}')">✅ แพ็คเสร็จ</button>`
+      : stChip('⏳ รอแพ็ค','sc-wait'));
   } else if(j.status==='packed'){
-    quick=`<button class="qb q-load" onclick="event.stopPropagation();loadOne('${id}')">🚚 จัดรถแล้ว</button>`;
-    acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “แพ็คเสร็จ” กลับเป็นรอแพ็ค?')">↩ ยกเลิกแพ็คเสร็จ</button>`;
+    quick = canLoad() ? `<button class="qb q-load" onclick="event.stopPropagation();loadOne('${id}')">🚚 จัดรถแล้ว</button>` : stChip('✅ แพ็คเสร็จ','sc-pack');
+    if(canPack()) acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “แพ็คเสร็จ” กลับเป็นรอแพ็ค?')">↩ ยกเลิกแพ็คเสร็จ</button>`;
   } else {
-    acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “จัดรถแล้ว” กลับเป็นแพ็คเสร็จ?')">↩ ยกเลิกจัดรถ</button>`;
+    if(!j.shippedAt) quick = stChip('🚚 จัดรถแล้ว','sc-load');
+    if(canLoad()) acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “จัดรถแล้ว” กลับเป็นแพ็คเสร็จ?')">↩ ยกเลิกจัดรถ</button>`;
   }
-  acts+=`<button class="btn btn-del" onclick="act('deleteJob','${id}','ลบงานนี้ออกจากระบบ?')">🗑 ลบงาน</button>`;
+  if(canDel()) acts+=`<button class="btn btn-del" onclick="act('deleteJob','${id}','ลบงานนี้ออกจากระบบ?')">🗑 ลบงาน</button>`;
   const meta=[ j.createdAt?`นำเข้า ${tShort(j.createdAt)} โดย ${esc(j.createdBy)}`:'',
     j.packedAt?`แพ็คเสร็จ ${tShort(j.packedAt)} โดย ${esc(j.packedBy)}`:'', j.loadedAt?`จัดรถ ${tShort(j.loadedAt)} โดย ${esc(j.loadedBy)}`:'', j.shippedAt?`<b style="color:var(--green)">✅ ส่งแล้ว ${esc(dayLabel(String(j.shippedAt).slice(0,10)))}${j.carrier?' · 🚚 '+esc(j.carrier):''}${j.shipDoc?' · '+esc(j.shipDoc):''}</b>`:''].filter(Boolean).join(' · ');
   const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.shippedAt?`<span class="badge b-packed">✅ ส่งแล้ว · ${esc((j.carrier||'').split('\n')[0])}</span>`:(j.status==='loaded'?'<span class="badge b-urgent" style="background:#64748b">รอยืนยันส่ง</span>':''), j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', dueBadge(j), j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.docDate?`<span title="วันที่ในเอกสาร">🗓 ${esc(shortDocDate(j.docDate))}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:'', (j.createdAt&&dayKey(j.createdAt)===dayKey(new Date()))?`<span class="newb" title="นำเข้าระบบวันนี้">🆕 นำเข้า ${tShort(j.createdAt).slice(6)} ${esc(j.createdBy||'')}</span>`:''].filter(Boolean).join('');
