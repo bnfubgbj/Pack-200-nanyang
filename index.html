@@ -695,10 +695,14 @@ function cntrOf(j){
   const m=/ขึ้นตู้\s*(?:วันที่)?\s*(\d{1,2})\s*[\/\-\.]\s*(\d{1,2})(?:\s*[\/\-\.]\s*(\d{2,4}))?/.exec(t); return m?mkDate_(m):null;
 }
 /* งานส่งออก ตปท. ไม่ผ่านขั้นจัดรถ: แพ็คเสร็จ → รอขึ้นตู้ → ยืนยันส่งจากรายงาน */
-const isExp = j => !!cntrOf(j);
+const EXPORT_CODES=['10ต64'];   // รหัสลูกค้าส่งออก ตปท. (เช่น MS. SASINEE) — ใบไหนไม่มี "รอบขึ้นตู้" ก็ยังนับเป็นส่งออก
+const expCodes = () => { const set=new Set(EXPORT_CODES); JOBS.forEach(j=>{ if(cntrOf(j)&&j.custCode) set.add(String(j.custCode).trim()); }); return set; };
+const EXPORT_NAMES=['SASINEE'];  // ชื่อลูกค้าส่งออก (กันรหัสลูกค้าพิมพ์ต่างกัน)
+const normCode = c => String(c||'').replace(/[\s\u200b]/g,'').replace(/[๐-๙]/g,d=>'๐๑๒๓๔๕๖๗๘๙'.indexOf(d)).toLowerCase();
+const isExp = j => !!cntrOf(j) || (!!j.custCode && [...expCodes()].some(c=>normCode(c)===normCode(j.custCode))) || EXPORT_NAMES.some(n=>String(j.custName||'').toUpperCase().includes(n));
 const waitCntr = j => isExp(j) && !j.shippedAt && (j.status==='packed' || j.status==='loaded');
 function cntrBadge(j){
-  const d=cntrOf(j); if(!d) return '';
+  const d=cntrOf(j); if(!d) return isExp(j) ? `<span class="cntr ${j.shippedAt?'done':''}">🚢 ส่งออก ตปท.${j.shippedAt?' <b>ส่งแล้ว</b>':''}</span>` : '';
   const t0=new Date(); t0.setHours(0,0,0,0); const diff=Math.round((d-t0)/864e5);
   const lbl = j.shippedAt ? 'ส่งแล้ว' : diff<0 ? `เลยกำหนด ${-diff} วัน` : diff===0 ? 'วันนี้!' : diff===1 ? 'พรุ่งนี้' : `อีก ${diff} วัน`;
   const p=n=>String(n).padStart(2,'0');
