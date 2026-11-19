@@ -1033,12 +1033,17 @@ function matchRecon(){
   RECON.forEach(rp=>{
     // 1) ตรงเลขเอกสาร (IFO / TFV / SO)
     rp.rows.forEach(r=>{ const j=JOBS.find(x=>x.id===r.docNo||x.docNo===r.docNo); r.jobId=j?j.id:''; r.how=j?'doc':''; if(j) used[j.id]=1; });
-    // 2) เอเยนต์ (AI…): เทียบชื่อลูกค้า กับใบเบิก Excel ที่ยังไม่ยืนยันส่ง
-    rp.rows.filter(r=>!r.jobId && rp.source==='EXCEL').forEach(r=>{
+    // 2) ไม่ตรงเลขเอกสาร (AI… / EX… / SI…): เทียบชื่อลูกค้า กับงานที่ยังไม่ยืนยันส่ง (ทั้งเอเยนต์และส่งตรง — เช่น ส่งออก ตปท. อยู่ในรายงานส่งตรง)
+    rp.rows.filter(r=>!r.jobId).forEach(r=>{
       const n=normName(r.custName);
-      const cands=JOBS.filter(j=>j.source==='EXCEL' && !j.shippedAt && n && (normName(j.custName)===n || normName(j.custName).includes(n) || n.includes(normName(j.custName))));
+      const raw=String(r.custName||'').toLowerCase();
+      const cands=JOBS.filter(j=>!j.shippedAt && ((String(j.custCode||'').length>=4 && raw.includes(String(j.custCode).toLowerCase())) || n && n.length>=3 && normName(j.custName).length>=3 && (normName(j.custName)===n || normName(j.custName).includes(n) || n.includes(normName(j.custName)))));
+      // ชื่อไม่ตรงทั้งหมด (เช่น ตัด MS. / ชื่อกลาง) → เสนอให้เลือกเอง จากคำภาษาอังกฤษที่ยาว ≥5 ตัวที่ตรงกัน (ไม่จับคู่อัตโนมัติ)
+      let loose=false;
+      if(!cands.length){ const toks=(raw.match(/[a-z]{5,}/g)||[]);
+        if(toks.length) JOBS.filter(j=>!j.shippedAt && toks.some(t=>normName(j.custName).includes(t))).forEach(j=>cands.push(j)); loose=cands.length>0; }
       r.cands=cands.map(j=>j.id);
-      const free=cands.filter(j=>!used[j.id]);
+      const free=loose?[]:cands.filter(j=>!used[j.id]);
       let pick = free.length===1 ? free[0] : free.find(j=>(+j.packedSacks||0)===r.sacks && r.sacks>0);
       if(pick && free.length>1 && free.filter(j=>(+j.packedSacks||0)===r.sacks).length>1) pick=null;
       if(pick){ r.jobId=pick.id; r.how='name'; used[pick.id]=1; }
@@ -1064,7 +1069,7 @@ function drawRecon(){
            + (t.first!==r?' <span class="tag t-info">แยกส่งหลายขนส่ง</span>':'');
       } else if(r.cands && r.cands.length){ st='<span class="tag t-warn">⚠ เลือกงานที่ตรงกัน</span>'; }
       else st='<span class="tag t-grey">ไม่อยู่ในแอป · บันทึกในรายงานอย่างเดียว</span>';
-      if(rp.source==='EXCEL' && ((r.cands&&r.cands.length)||r.how==='name')){
+      if((r.cands&&r.cands.length)||r.how==='name'){
         const opts=(r.cands||[]).map(id=>JOBS.find(x=>x.id===id)).filter(Boolean);
         sel=`<select onchange="RECON[${ri}].rows[${i}].jobId=this.value;RECON[${ri}].rows[${i}].how=this.value?'name':'';drawRecon()"><option value="">— ไม่จับคู่ —</option>${opts.map(o=>`<option value="${esc(o.id)}" ${o.id===r.jobId?'selected':''}>${esc(jobLabel(o))}</option>`).join('')}</select>`;
       }
