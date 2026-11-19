@@ -163,6 +163,10 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .sc-ship{background:#e7f6ec;color:#1f7a3a;line-height:1.35}.sc-ship small{font-weight:600;font-size:12px;color:#2f6b45}
 .sc-cntr{background:linear-gradient(90deg,#e0f2fe,#ede9fe);color:#4338ca;border:1px solid #c7d2fe}.sc-cntr small{font-size:11.5px;font-weight:600;color:#6366f1}
 .qb.q-cntr{background:linear-gradient(90deg,#0ea5e9,#6366f1);color:#fff;min-width:150px}
+.xpop{display:none;position:absolute;z-index:40;background:#fff;border:1px solid #c7d2fe;border-radius:12px;box-shadow:0 10px 30px #0003;padding:10px 12px;min-width:330px;font-size:13px}
+.xpop.on{display:block}.xpop h4{margin:0 0 6px;font-size:13.5px;color:#3730a3}
+.xpop table{border-collapse:collapse;width:100%;margin-bottom:8px}.xpop th,.xpop td{border-bottom:1px solid #eef0f4;padding:3px 6px;text-align:right}.xpop th{color:#6b7280;font-weight:600;font-size:12px}
+.xpop td.c{text-align:left;font-weight:600}.xpop .need{color:#b91c1c;font-weight:700}.xpop .ok{color:#15803d;font-weight:700}.xpop tr.t td{font-weight:700;border-top:2px solid #e5e7eb}
 .ocrz{border:2px dashed #a5b4fc;background:#eef2ff;border-radius:12px;padding:12px;text-align:center;cursor:pointer;margin-top:12px;font-size:13.5px;color:#3730a3}.ocrz small{color:#6366f1}.ocrz.busy{opacity:.7;cursor:wait}
 .ogw{overflow-x:auto}.ogw table{border-collapse:collapse;font-size:13px;width:100%}
 .ogw th,.ogw td{border:1px solid var(--line);padding:3px 4px;text-align:center}.ogw th{background:#f3f4f6;font-weight:600}
@@ -281,7 +285,8 @@ table.rep select{font:inherit;font-size:12.5px;max-width:340px;margin-top:3px}
         <option value="">ทุกวัน</option><option value="today">วันนี้</option><option value="tmr">พรุ่งนี้</option><option value="yday">เมื่อวาน</option><option value="impToday">🆕 นำเข้าวันนี้</option><option value="pick">เลือกวันที่…</option></select>
       <input type="date" id="fDate" style="display:none;flex:0;min-width:150px" onchange="render()">
       <button class="chip" id="btnAll" onclick="toggleAll()">กางทั้งหมด</button>
-      <button class="chip" id="btnExp" style="display:none;background:linear-gradient(90deg,#0ea5e9,#6366f1);color:#fff;border:0" onclick="openExp()">⬇ Excel ส่งออก ตปท.</button>
+      <button class="chip" id="btnExp" style="display:none;background:linear-gradient(90deg,#0ea5e9,#6366f1);color:#fff;border:0" onclick="openExp()" onmouseenter="showExpPop(this)" onmouseleave="hideExpPop()">⬇ Excel ส่งออก ตปท.</button>
+      <div id="expPop" class="xpop"></div>
       <input id="fQ" placeholder="🔍 ค้นหา ลูกค้า / SO / IFO / ชื่อกระสอบ" oninput="render()">
     </div>
     <div class="list" id="list"></div>
@@ -732,7 +737,26 @@ function expRounds(){
   return Object.keys(by).sort().reverse().map(k=>({k,jobs:by[k]}));
 }
 function rLabel(k){ if(k==='-') return 'ไม่ระบุรอบ'; const [y,m,d]=k.split('-'); return `${d}/${m}/${String(+y+543).slice(2)}`; }
-function openExp(){
+/* ป้อปอัปตอนชี้เมาส์ที่ปุ่ม: ยอดสั่ง export / ในแอป / ยังค้าง (คู่) ทุกรอบที่ใส่ยอดสั่งไว้ */
+function showExpPop(btn){
+  const rs=expRounds().filter(r=>r.k!=='-' && (r.jobs.some(j=>!j.shippedAt) || Object.keys(LS.get('pk_exp_ord_'+r.k,{})).length) && r.k>=dayKey(new Date(Date.now()-3*864e5))); let html='';
+  rs.forEach(r=>{ const o=LS.get('pk_exp_ord_'+r.k,{}); const keys=Object.keys(o); const have=inAppPairs(r.jobs);
+    const cols=[...new Set([...keys.map(k=>k.split('|')[0]), ...Object.keys(have).map(k=>k.split('|')[0])])].sort(colorSort);
+    let tO=0,tH=0,tN=0;
+    const rowsH=cols.map(c=>{ const ord=keys.filter(k=>k.startsWith(c+'|')).reduce((a,k)=>a+o[k]*12,0);
+      const hv=Object.keys(have).filter(k=>k.startsWith(c+'|')).reduce((a,k)=>a+have[k],0);
+      const nd=keys.filter(k=>k.startsWith(c+'|')).reduce((a,k)=>a+Math.max(0,o[k]*12-(have[k]||0)),0);
+      tO+=ord; tH+=hv; tN+=nd;
+      return `<tr><td class="c">${dot(c)}${esc(c)}</td><td>${ord?fmt(ord):'-'}</td><td>${fmt(hv)}</td><td class="${keys.length?(nd>0?'need':'ok'):''}">${keys.length?(nd>0?fmt(nd):'ครบ ✓'):'-'}</td></tr>`; }).join('');
+    html+=`<h4>🚢 รอบขึ้นตู้ ${rLabel(r.k)} · ${r.jobs.length} ใบ${keys.length?'':' <small style="color:#b45309">(ยังไม่ใส่ยอดสั่ง)</small>'}</h4>
+      <table><tr><th style="text-align:left">สี</th><th>export สั่ง (คู่)</th><th>ในแอป (คู่)</th><th>ยังค้าง (คู่)</th></tr>${rowsH}
+      <tr class="t"><td class="c">รวม</td><td>${tO?fmt(tO):'-'}</td><td>${fmt(tH)}</td><td class="${keys.length?(tN>0?'need':'ok'):''}">${keys.length?(tN>0?fmt(tN):'ครบ ✓'):'-'}</td></tr></table>`; });
+  if(!html) html='<div style="color:#6b7280">ยังไม่มีงานส่งออกที่ระบุรอบขึ้นตู้</div>';
+  const pop=document.getElementById('expPop'); pop.innerHTML=html+'<div style="font-size:11.5px;color:#6b7280">“ยังค้าง” = ยอดสั่ง − ใบเบิกที่เข้าแอปแล้ว (แพ็คแล้ว + ยังไม่แพ็ค) · กดปุ่มเพื่อใส่ยอด / ดาวน์โหลด Excel</div>';
+  const b=btn.getBoundingClientRect(); pop.style.left=Math.max(8,Math.min(b.left+window.scrollX, window.innerWidth-360))+'px'; pop.style.top=(b.bottom+window.scrollY+6)+'px';
+  pop.classList.add('on'); }
+function hideExpPop(){ document.getElementById('expPop').classList.remove('on'); }
+function openExp(){ hideExpPop();
   const rs=expRounds(); if(!rs.length) return toast('ไม่มีงานส่งออก ตปท. ในแอป');
   expRound.innerHTML=rs.map(r=>`<option value="${r.k}">รอบขึ้นตู้ ${rLabel(r.k)} · ${r.jobs.length} ใบ</option>`).join('')+(rs.length>1?'<option value="*">ทุกรอบรวมกัน</option>':'');
   expRound.onchange=expUpd; expUpd(); openM('mExp'); }
@@ -818,10 +842,20 @@ function drawOrd(){
   let tot=0;
   ogBox.innerHTML=`<table><tr><th style="text-align:left">สี / เบอร์ (โหล)</th>${sizes.map(z=>`<th>${z}</th>`).join('')}<th>รวมสั่ง</th><th>ในแอปแล้ว</th><th>ยังขาด</th></tr>`+
     colors.map(c=>{ const rt=sizes.reduce((t,z)=>t+(+o[c+'|'+z]||0),0); tot+=rt; const hv=sizes.reduce((t,z)=>t+(have[c+'|'+z]||0),0)/12, nd=rt-hv;
-      return `<tr><td class="c">${dot(c)}${esc(c)}</td>${sizes.map(z=>{const v=o[c+'|'+z]||''; return `<td><input class="og ${v?'has':''}" type="number" inputmode="numeric" min="0" data-k="${esc(c+'|'+z)}" value="${v}" oninput="setOrd(this)"></td>`;}).join('')}
+      return `<tr><td class="c">${dot(c)}${esc(c)}</td>${sizes.map(z=>{const v=o[c+'|'+z]||''; return `<td><input class="og ${v?'has':''}" type="text" inputmode="numeric" autocomplete="off" data-k="${esc(c+'|'+z)}" value="${v}" oninput="this.value=this.value.replace(/[^0-9]/g,'');setOrd(this)" onkeydown="ogKey(event,this)" onfocus="this.select()"></td>`;}).join('')}
         <td class="t">${rt?fmt(rt):''}</td><td>${hv?fmt(hv):''}</td><td class="${rt? (nd>0?'need':'ok'):''}">${rt? (nd>0?fmt(nd):'ครบ ✓'):''}</td></tr>`; }).join('')+
     `<tr><td class="c t">รวม</td>${sizes.map(z=>`<td class="t">${(v=>v?fmt(v):'')(colors.reduce((t,c)=>t+(+o[c+'|'+z]||0),0))}</td>`).join('')}<td class="t">${fmt(tot)}</td><td class="t">${fmt(Object.values(have).reduce((a,b)=>a+b,0)/12)}</td><td class="t"></td></tr></table>`;
   return tot; }
+/* เลื่อนช่องด้วยลูกศร ← → ↑ ↓ / Enter (ลงล่าง) / Tab */
+function ogKey(e,el){
+  const map={ArrowLeft:[0,-1],ArrowRight:[0,1],ArrowUp:[-1,0],ArrowDown:[1,0],Enter:[1,0]}; const d=map[e.key]; if(!d) return;
+  e.preventDefault();
+  const rows=[...ogBox.querySelectorAll('tr')].filter(tr=>tr.querySelector('input.og'));
+  const r=rows.findIndex(tr=>tr.contains(el)); const cols=[...rows[r].querySelectorAll('input.og')]; const c=cols.indexOf(el);
+  let nr=r+d[0], nc=c+d[1];
+  if(nc<0){ nr--; nc=cols.length-1; } if(nc>=cols.length){ nr++; nc=0; }
+  if(nr<0||nr>=rows.length) return;
+  const t=rows[nr].querySelectorAll('input.og')[nc]; if(t){ t.focus(); t.select(); } }
 function setOrd(el){ const o=getOrd(), v=+el.value||0; if(v) o[el.dataset.k]=v; else delete o[el.dataset.k]; LS.set(ordKey(),o);
   el.classList.toggle('has',!!v); clearTimeout(window._ogT); window._ogT=setTimeout(()=>{ const f=document.activeElement&&document.activeElement.dataset.k; expUpd(); if(f){ const n=ogBox.querySelector(`[data-k="${CSS.escape(f)}"]`); if(n){ n.focus(); const L=n.value.length; try{n.setSelectionRange(L,L)}catch(e){} } } },500); }
 function ordPairs(){ const o=getOrd(), q={}; Object.keys(o).forEach(k=>q[k]=(+o[k]||0)*12); return q; }
