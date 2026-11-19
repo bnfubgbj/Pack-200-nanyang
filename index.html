@@ -141,6 +141,11 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .chev{color:#9aa1ad;font-size:13px;width:12px}
 .jt .nm{font-size:15.5px}
 .jsub{margin-top:1px!important;font-size:12.5px!important;gap:4px 10px!important;align-items:center}
+.cntr{display:inline-flex;align-items:center;gap:6px;margin-left:10px;vertical-align:middle;font-size:12.5px;font-weight:700;color:#fff;padding:3px 12px;border-radius:999px;background:linear-gradient(90deg,#0ea5e9,#6366f1);box-shadow:0 1px 4px rgba(99,102,241,.35)}
+.cntr b{background:rgba(255,255,255,.25);border-radius:999px;padding:0 8px}
+.cntr.near{background:linear-gradient(90deg,#f59e0b,#ef4444)}
+.cntr.late{background:linear-gradient(90deg,#dc2626,#991b1b)}
+.cntr.done{background:#94a3b8;box-shadow:none}
 .due{display:inline-block;font-size:12px;font-weight:700;padding:1px 8px;border-radius:6px;background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe}
 .due.near{background:#fff7ed;color:#c2410c;border-color:#fdba74}
 .due.late{background:#fee2e2;color:#b91c1c;border-color:#fca5a5}
@@ -674,8 +679,24 @@ function dayLabel(k){ if(k==='0000-00-00') return 'ไม่ทราบวั�
 function dueOf(j){
   const t=[j.sackName,j.note].filter(Boolean).join(' • ');
   const m=/ส่ง(?:วันที่)?\s*(\d{1,2})\s*[\/\-\.]\s*(\d{1,2})(?:\s*[\/\-\.]\s*(\d{2,4}))?/.exec(t); if(!m) return null;
-  let y=m[3]?+m[3]:new Date().getFullYear(); if(y<100) y+=2500; if(y>2400) y-=543;
+  return mkDate_(m);
+}
+function mkDate_(m){
+  let y=m[3]?+m[3]:new Date().getFullYear(); if(y<100) y = y>=60 ? y+2500 : y+2000; if(y>2400) y-=543;
   const d=new Date(y,+m[2]-1,+m[1]); if(isNaN(d)||d.getMonth()!==+m[2]-1) return null; return d;
+}
+/* ส่งออก ตปท.: "รอบขึ้นตู้ 24/11/26" */
+function cntrOf(j){
+  const t=[j.sackName,j.note].filter(Boolean).join(' • ');
+  const m=/ขึ้นตู้\s*(?:วันที่)?\s*(\d{1,2})\s*[\/\-\.]\s*(\d{1,2})(?:\s*[\/\-\.]\s*(\d{2,4}))?/.exec(t); return m?mkDate_(m):null;
+}
+function cntrBadge(j){
+  const d=cntrOf(j); if(!d) return '';
+  const t0=new Date(); t0.setHours(0,0,0,0); const diff=Math.round((d-t0)/864e5);
+  const lbl = j.shippedAt ? 'ส่งแล้ว' : diff<0 ? `เลยกำหนด ${-diff} วัน` : diff===0 ? 'วันนี้!' : diff===1 ? 'พรุ่งนี้' : `อีก ${diff} วัน`;
+  const p=n=>String(n).padStart(2,'0');
+  const cls = j.shippedAt ? 'cntr done' : diff<0 ? 'cntr late' : diff<=3 ? 'cntr near' : 'cntr';
+  return `<span class="${cls}">🚢 ส่งออก ตปท. · รอบขึ้นตู้ ${p(d.getDate())}/${p(d.getMonth()+1)}/${String(d.getFullYear()+543).slice(2)} <b>${lbl}</b></span>`;
 }
 function dueBadge(j){
   const d=dueOf(j); if(!d) return '';
@@ -733,7 +754,7 @@ function jobCard(j, urgNo){
     <div class="jh" onclick="toggle('${id}')">
       <div class="chev">${open?'▾':'▸'}</div>
       <div class="jmain">
-        <div class="jt"><span class="nm">${esc(j.custName)}</span></div>
+        <div class="jt"><span class="nm">${esc(j.custName)}</span>${cntrBadge(j)}</div>
         <div class="jsub">${sub}</div>
         ${isBig(j)?progBar(j):''}
         <div class="csum">${colorSummary(cvOnly?j.items:sackItems(j))}${!cvOnly&&boxPairsOf(j)?`<span class="cs" style="color:#7c3aed">📦 ${[...new Set(boxItems(j).map(i=>i.model.replace('ฟองน้ำ ','')))].join('/')} <b>${fmt(boxPairsOf(j))}</b> คู่ ≈ <b>${fmt(boxesOf(j))}</b> กล่อง</span>`:''}${!cvOnly&&cvPairsOf(j)?`<span class="cs" style="color:#7c4a1e">👟 + ผ้าใบ <b>${fmt(cvPairsOf(j))}</b> คู่</span>`:''}</div>
