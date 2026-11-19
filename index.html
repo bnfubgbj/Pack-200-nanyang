@@ -254,8 +254,8 @@ table.rep select{font:inherit;font-size:12.5px;max-width:340px;margin-top:3px}
       <button class="sb" data-src="PDF" onclick="setSrc('PDF')">🚚 ส่งตรง <b id="sbP"></b></button>
     </div>
     <div class="filters">
-      <button class="chip" data-s="active" onclick="setStatus('active')">ล่าสุด</button>
-      <button class="chip" data-s="all" onclick="setStatus('all')">ทั้งหมด</button>
+      <button class="chip" data-s="active" onclick="setStatus('active')">📦 ยังไม่ส่ง</button>
+      <button class="chip" data-s="shipped" onclick="setStatus('shipped')">✅ ส่งแล้ว</button>
       <select id="fSrc" style="display:none" onchange="render()"><option value="">ทุกแหล่ง</option><option value="EXCEL">เอเยนต์ (Excel)</option><option value="PDF">ส่งตรง (PDF)</option></select>
       <select id="fTrip" onchange="render()"><option value="">ทุกเที่ยว</option></select>
       <select id="fDay" onchange="if(this.value==='pick'){fDate.style.display='';fDate.showPicker&&fDate.showPicker();}else{fDate.style.display='none';}render()">
@@ -612,7 +612,8 @@ function render(){
   const src=fSrc.value, trip=ft.value, q=fQ.value.trim().toLowerCase();
   const dv=fDay.value, dayF = dv==='today'?dayKey(new Date()) : dv==='yday'?dayKey(new Date(Date.now()-864e5)) : dv==='tmr'?dayKey(new Date(Date.now()+864e5)) : (dv==='pick'&&fDate.value)?fDate.value : '';
   let L = JOBS.filter(j=>{
-    if(STATUS==='active' && j.status==='loaded') return false;   // ส่งแล้ว = เคลียร์ออกจากหน้าหลัก
+    if(STATUS==='active' && j.shippedAt) return false;   // ยังไม่ส่ง = ทุกอย่างที่ยังไม่ยืนยันส่ง
+    if(STATUS==='shipped' && !j.shippedAt) return false;
     if(STATUS==='pending' && !(j.status==='pending'&&!isCvOnly(j))) return false;
     if(STATUS==='urgent' && !(j.status==='pending'&&j.priority>0)) return false;
     if(STATUS==='packed' && j.status!=='packed') return false;
@@ -631,12 +632,14 @@ function render(){
   const gKey = j => j.status==='loaded'?(j.shippedAt?'z2|✅ ส่งแล้ว (ยืนยันจากรายงาน)':'z1|🚚 จัดรถแล้ว — รอยืนยันส่ง') : j.status==='packed'?'y|✅ แพ็คเสร็จ — รอขึ้นรถ'
     : isCvOnly(j)?'w|👟 ผ้าใบ — ไม่ต้องแพ็คกระสอบ (รอจัดรถ)' : j.priority>0?(j.source==='PDF'?'a2|⚡ งานด่วน ส่งตรง — แพ็คก่อน':'a1|⚡ งานด่วน เอเยนต์ — แพ็คก่อน') : j.trip?('b|'+String(j.trip).padStart(3,'0')+'|🚚 เอเยนต์ เที่ยว '+j.trip+' · สั่งของเข้าโกดัง') : 'x|📄 งานส่งตรง (PDF) · ลงวันที่ตามหัวบิล';
   const today=dayKey(new Date());
-  const byDay={}; L.forEach(j=>{const d=jobDay(j)||'0000-00-00';(byDay[d]=byDay[d]||[]).push(j);});
-  const days=Object.keys(byDay).sort(); // เก่า → ใหม่ (งานค้างขึ้นก่อน)
+  const SHIPV = STATUS==='shipped';
+  const dOf = j => SHIPV ? (String(j.shippedAt||'').slice(0,10)||'0000-00-00') : (jobDay(j)||'0000-00-00');
+  const byDay={}; L.forEach(j=>{const d=dOf(j);(byDay[d]=byDay[d]||[]).push(j);});
+  const days=Object.keys(byDay).sort(); if(SHIPV) days.reverse(); // ส่งแล้ว: ล่าสุดก่อน / ยังไม่ส่ง: เก่า → ใหม่
   const html = days.map(d=>{
     const dj=byDay[d], pendN=dj.filter(j=>j.status==='pending'&&!isCvOnly(j)).length, old = d<today && pendN>0;
     const groups={}; dj.forEach(j=>{(groups[gKey(j)]=groups[gKey(j)]||[]).push(j);});
-    const head=`<div class="dayh ${old?'old':''} ${d===today?'td':''}"><span>📅 ${dayLabel(d)}</span><span class="ds">${old?`⚠ ค้างแพ็ค ${pendN} งาน`:`${dj.length} งาน${pendN?` · รอแพ็ค ${pendN}`:''}`}</span></div>`;
+    const head=`<div class="dayh ${old?'old':''} ${d===today?'td':''}"><span>${SHIPV?'✅ ส่งวันที่ ':'📅 '}${dayLabel(d)}</span><span class="ds">${old?`⚠ ค้างแพ็ค ${pendN} งาน`:`${dj.length} งาน${pendN?` · รอแพ็ค ${pendN}`:''}`}</span></div>`;
     return head + Object.keys(groups).sort().map(k=>{
       const g=groups[k], label=k.split('|').pop();
       const doz=g.reduce((s,j)=>s+(+j.totalDoz||0),0), sk=g.reduce((s,j)=>s+(+(j.status==='pending'?(isCvOnly(j)?0:estOf(j)):j.packedSacks)||0),0);
