@@ -151,10 +151,12 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .csum b{color:var(--ink)}
 .jtot .big{font-size:18px!important}.jtot small{font-size:12px;font-weight:500}
 .qwrap{flex-shrink:0}
-.stchip{display:inline-block;font-size:13px;font-weight:700;padding:8px 14px;border-radius:9px;white-space:nowrap;text-align:center}
+.stchip{display:inline-flex;flex-direction:column;justify-content:center;align-items:center;box-sizing:border-box;width:210px;min-height:52px;font-size:13px;font-weight:700;padding:6px 12px;border-radius:9px;white-space:nowrap;text-align:center;overflow:hidden}
+.stchip small{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:720px){.stchip{width:100%}}
 .pkd{margin-top:4px;font-size:11.5px;font-weight:700;color:#1f7a3a;background:#e7f6ec;border-radius:6px;padding:2px 7px;white-space:nowrap;display:inline-block}
-.sc-ship{background:#e7f6ec;color:#1f7a3a;max-width:230px;white-space:normal;line-height:1.35}.sc-ship small{display:block;font-weight:600;font-size:12px;color:#2f6b45}
-.sc-wait{background:#f1f5f9;color:#475569}.sc-pack{background:#e7f6ec;color:#1f7a3a}.sc-load{background:#e8eef7;color:#1e3a5f}
+.sc-ship{background:#e7f6ec;color:#1f7a3a;line-height:1.35}.sc-ship small{font-weight:600;font-size:12px;color:#2f6b45}
+.sc-wait{background:#f1f5f9;color:#475569}.sc-pack{background:#e7f6ec;color:#1f7a3a}.sc-load{background:#fff4d6;color:#a15c00;border:1px solid #f6c560}
 .qb{font:inherit;font-weight:600;font-size:13px;border:0;border-radius:9px;padding:8px 12px;cursor:pointer;white-space:nowrap}
 .q-pack{background:var(--green);color:#fff}.q-urg{background:#fff;color:var(--amber);border:1.5px solid var(--amber)}.q-load{background:var(--navy2);color:#fff}
 .job.open{box-shadow:0 2px 10px #0001}
@@ -176,6 +178,7 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .job.st-packed,.job.st-loaded{opacity:.85;border-left-color:var(--green)!important}
 @media(max-width:720px){.qwrap .qb{flex:1}}
 .job.st-loaded{opacity:.6;border-left-color:#9ca3af!important}
+.job.st-loaded.wait-ship{opacity:1;border-left-color:#f0a500!important}
 .grp .bulk{margin-left:8px;padding:5px 10px;font-size:12px}
 .kpi.k4 .v{color:#555}
 body.dragging::after{content:'📥 ปล่อยไฟล์ตรงไหนก็ได้ เพื่อนำเข้า';position:fixed;inset:10px;border:4px dashed var(--navy2);border-radius:20px;background:#e8f0fecc;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:var(--navy);z-index:100;pointer-events:none}
@@ -711,7 +714,7 @@ function jobCard(j, urgNo){
     quick = canLoad() ? `<button class="qb q-load" onclick="event.stopPropagation();loadOne('${id}')">🚚 จัดรถแล้ว</button>` : stChip('✅ แพ็คเสร็จ','sc-pack');
     if(canPack()) acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “แพ็คเสร็จ” กลับเป็นรอแพ็ค?')">↩ ยกเลิกแพ็คเสร็จ</button>`;
   } else {
-    quick = j.shippedAt ? `<span class="stchip sc-ship">✅ ส่งแล้ว ${shipD(j.shippedAt)}${j.carrier?`<small>🚚 ${esc(String(j.carrier).split('\n')[0])}</small>`:''}</span>` : `<span class="stchip sc-load">🚚 จัดรถแล้ว · รอยืนยันส่ง${j.loadedAt?`<small style="display:block;font-size:12px;font-weight:600">จัดรถ ${tShort(j.loadedAt)}</small>`:''}</span>`;
+    quick = j.shippedAt ? `<span class="stchip sc-ship" title="${esc(j.carrier||'')}">✅ ส่งแล้ว ${shipD(j.shippedAt)}${j.carrier?`<small>🚚 ${esc(String(j.carrier).split('\n')[0])}</small>`:''}</span>` : `<span class="stchip sc-load">🚚 จัดรถแล้ว · รอยืนยันส่ง${j.loadedAt?`<small style="font-size:12px;font-weight:600">จัดรถ ${tShort(j.loadedAt)}</small>`:''}</span>`;
     if(canLoad()) acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “จัดรถแล้ว” กลับเป็นแพ็คเสร็จ?')">↩ ยกเลิกจัดรถ</button>`;
   }
   if(canDel()) acts+=`<button class="btn btn-del" onclick="act('deleteJob','${id}','ลบงานนี้ออกจากระบบ?')">🗑 ลบงาน</button>`;
@@ -725,7 +728,7 @@ function jobCard(j, urgNo){
         ? `<div class="big">${fmt(estOf(j))}<small> กส.</small></div><div class="sm">${boxesOf(j)?`<b style="color:#7c3aed">+ ${fmt(boxesOf(j))} กล่อง</b> · `:''}${fmt(j.totalDoz)} โหล</div>`
         : `<div class="big" style="color:#7c3aed">${fmt(boxesOf(j))}<small> กล่อง</small></div><div class="sm">${fmt(j.totalDoz)} โหล</div>`)
     : `<div class="big" style="color:var(--green)">${+j.packedSacks||!+j.packedBoxes?fmt(j.packedSacks)+'<small> กส.</small>':fmt(j.packedBoxes)+'<small> กล่อง</small>'}</div><div class="sm">${+j.packedSacks&&+j.packedBoxes?'+ '+fmt(j.packedBoxes)+' กล่อง · ':''}${fmt(j.totalDoz)} โหล</div>${j.packedAt?`<div class="pkd">📦 แพ็คเสร็จ ${tShort(j.packedAt)}${j.packedBy?' · '+esc(j.packedBy):''}</div>`:''}`;
-  return `<div class="job st-${j.status} ${urgent?'urgent':''} ${open?'open':''}">
+  return `<div class="job st-${j.status} ${j.status==='loaded'&&!j.shippedAt?'wait-ship':''} ${urgent?'urgent':''} ${open?'open':''}">
     ${urgent?`<div class="uband"><b>⚡ งานด่วน #${urgNo} — แพ็คก่อน<em class="srcTag">${j.source==='PDF'?'🚚 ส่งตรง':'🏪 เอเยนต์'}</em></b> <span>ติดโดย ${esc(j.priorityBy)} ${tShort(j.priorityAt)}</span></div>`:''}
     <div class="jh" onclick="toggle('${id}')">
       <div class="chev">${open?'▾':'▸'}</div>
