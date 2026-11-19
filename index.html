@@ -152,6 +152,8 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .jtot .big{font-size:18px!important}.jtot small{font-size:12px;font-weight:500}
 .qwrap{flex-shrink:0}
 .stchip{display:inline-block;font-size:13px;font-weight:700;padding:8px 14px;border-radius:9px;white-space:nowrap;text-align:center}
+.pkd{margin-top:4px;font-size:11.5px;font-weight:700;color:#1f7a3a;background:#e7f6ec;border-radius:6px;padding:2px 7px;white-space:nowrap;display:inline-block}
+.sc-ship{background:#e7f6ec;color:#1f7a3a;max-width:230px;white-space:normal;line-height:1.35}.sc-ship small{display:block;font-weight:600;font-size:12px;color:#2f6b45}
 .sc-wait{background:#f1f5f9;color:#475569}.sc-pack{background:#e7f6ec;color:#1f7a3a}.sc-load{background:#e8eef7;color:#1e3a5f}
 .qb{font:inherit;font-weight:600;font-size:13px;border:0;border-radius:9px;padding:8px 12px;cursor:pointer;white-space:nowrap}
 .q-pack{background:var(--green);color:#fff}.q-urg{background:#fff;color:var(--amber);border:1.5px solid var(--amber)}.q-load{background:var(--navy2);color:#fff}
@@ -706,20 +708,20 @@ function jobCard(j, urgNo){
     quick = canLoad() ? `<button class="qb q-load" onclick="event.stopPropagation();loadOne('${id}')">🚚 จัดรถแล้ว</button>` : stChip('✅ แพ็คเสร็จ','sc-pack');
     if(canPack()) acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “แพ็คเสร็จ” กลับเป็นรอแพ็ค?')">↩ ยกเลิกแพ็คเสร็จ</button>`;
   } else {
-    if(!j.shippedAt) quick = stChip('🚚 จัดรถแล้ว','sc-load');
+    quick = j.shippedAt ? `<span class="stchip sc-ship">✅ ส่งแล้ว${j.carrier?`<small>🚚 ${esc(String(j.carrier).split('\n')[0])}</small>`:''}</span>` : stChip('🚚 จัดรถแล้ว · รอยืนยันส่ง','sc-load');
     if(canLoad()) acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “จัดรถแล้ว” กลับเป็นแพ็คเสร็จ?')">↩ ยกเลิกจัดรถ</button>`;
   }
   if(canDel()) acts+=`<button class="btn btn-del" onclick="act('deleteJob','${id}','ลบงานนี้ออกจากระบบ?')">🗑 ลบงาน</button>`;
   const meta=[ j.createdAt?`นำเข้า ${tShort(j.createdAt)} โดย ${esc(j.createdBy)}`:'',
     j.packedAt?`แพ็คเสร็จ ${tShort(j.packedAt)} โดย ${esc(j.packedBy)}`:'', j.loadedAt?`จัดรถ ${tShort(j.loadedAt)} โดย ${esc(j.loadedBy)}`:'', j.shippedAt?`<b style="color:var(--green)">✅ ส่งแล้ว ${esc(dayLabel(String(j.shippedAt).slice(0,10)))}${j.carrier?' · 🚚 '+esc(j.carrier):''}${j.shipDoc?' · '+esc(j.shipDoc):''}</b>`:''].filter(Boolean).join(' · ');
-  const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.shippedAt?`<span class="badge b-packed">✅ ส่งแล้ว · ${esc((j.carrier||'').split('\n')[0])}</span>`:(j.status==='loaded'?'<span class="badge b-urgent" style="background:#64748b">รอยืนยันส่ง</span>':''), j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', dueBadge(j), j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.docDate?`<span title="วันที่ในเอกสาร">🗓 ${esc(shortDocDate(j.docDate))}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:'', (j.createdAt&&dayKey(j.createdAt)===dayKey(new Date()))?`<span class="newb" title="นำเข้าระบบวันนี้">🆕 นำเข้า ${tShort(j.createdAt).slice(6)} ${esc(j.createdBy||'')}</span>`:''].filter(Boolean).join('');
+  const sub=[`<span class="mono">${esc(j.docNo||j.custCode||'-')}</span>`, j.sackName?`<span class="sack">🏷 ${esc(j.sackName)}</span>`:'', dueBadge(j), j.transport?`<span>🚚 ${esc(j.transport)}</span>`:'', j.docDate?`<span title="วันที่ในเอกสาร">🗓 ${esc(shortDocDate(j.docDate))}</span>`:'', j.note?`<span class="hasnote" title="${esc(j.note)}">📝</span>`:'', (j.createdAt&&dayKey(j.createdAt)===dayKey(new Date()))?`<span class="newb" title="นำเข้าระบบวันนี้">🆕 นำเข้า ${tShort(j.createdAt).slice(6)} ${esc(j.createdBy||'')}</span>`:''].filter(Boolean).join('');
   const right = cvOnly && j.status!=='loaded'
     ? `<div class="big" style="color:#7c4a1e">${fmt(cvPairsOf(j))}<small> คู่</small></div><div class="sm">👟 ผ้าใบ</div>`
     : j.status==='pending'
     ? (estOf(j)>0 || !boxesOf(j)
         ? `<div class="big">${fmt(estOf(j))}<small> กส.</small></div><div class="sm">${boxesOf(j)?`<b style="color:#7c3aed">+ ${fmt(boxesOf(j))} กล่อง</b> · `:''}${fmt(j.totalDoz)} โหล</div>`
         : `<div class="big" style="color:#7c3aed">${fmt(boxesOf(j))}<small> กล่อง</small></div><div class="sm">${fmt(j.totalDoz)} โหล</div>`)
-    : `<div class="big" style="color:var(--green)">${+j.packedSacks||!+j.packedBoxes?fmt(j.packedSacks)+'<small> กส.</small>':fmt(j.packedBoxes)+'<small> กล่อง</small>'}</div><div class="sm">${+j.packedSacks&&+j.packedBoxes?'+ '+fmt(j.packedBoxes)+' กล่อง · ':''}${fmt(j.totalDoz)} โหล</div>`;
+    : `<div class="big" style="color:var(--green)">${+j.packedSacks||!+j.packedBoxes?fmt(j.packedSacks)+'<small> กส.</small>':fmt(j.packedBoxes)+'<small> กล่อง</small>'}</div><div class="sm">${+j.packedSacks&&+j.packedBoxes?'+ '+fmt(j.packedBoxes)+' กล่อง · ':''}${fmt(j.totalDoz)} โหล</div>${j.packedAt?`<div class="pkd">📦 แพ็คเสร็จ ${tShort(j.packedAt)}${j.packedBy?' · '+esc(j.packedBy):''}</div>`:''}`;
   return `<div class="job st-${j.status} ${urgent?'urgent':''} ${open?'open':''}">
     ${urgent?`<div class="uband"><b>⚡ งานด่วน #${urgNo} — แพ็คก่อน<em class="srcTag">${j.source==='PDF'?'🚚 ส่งตรง':'🏪 เอเยนต์'}</em></b> <span>ติดโดย ${esc(j.priorityBy)} ${tShort(j.priorityAt)}</span></div>`:''}
     <div class="jh" onclick="toggle('${id}')">
