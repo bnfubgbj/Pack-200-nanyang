@@ -161,6 +161,7 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 @media(max-width:720px){.stchip{width:100%}}
 .pkd{margin-top:4px;font-size:11.5px;font-weight:700;color:#1f7a3a;background:#e7f6ec;border-radius:6px;padding:2px 7px;white-space:nowrap;display:inline-block}
 .sc-ship{background:#e7f6ec;color:#1f7a3a;line-height:1.35}.sc-ship small{font-weight:600;font-size:12px;color:#2f6b45}
+.sc-cntr{background:linear-gradient(90deg,#e0f2fe,#ede9fe);color:#4338ca;border:1px solid #c7d2fe}.sc-cntr small{font-size:11.5px;font-weight:600;color:#6366f1}
 .sc-wait{background:#f1f5f9;color:#475569}.sc-pack{background:#e7f6ec;color:#1f7a3a}.sc-load{background:#fff4d6;color:#a15c00;border:1px solid #f6c560}
 .qb{font:inherit;font-weight:600;font-size:13px;border:0;border-radius:9px;padding:8px 12px;cursor:pointer;white-space:nowrap}
 .q-pack{background:var(--green);color:#fff}.q-urg{background:#fff;color:var(--amber);border:1.5px solid var(--amber)}.q-load{background:var(--navy2);color:#fff}
@@ -183,6 +184,7 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .job.st-packed,.job.st-loaded{opacity:.85;border-left-color:var(--green)!important}
 @media(max-width:720px){.qwrap .qb{flex:1}}
 .job.st-loaded{opacity:.6;border-left-color:#9ca3af!important}
+.job.wait-cntr{opacity:1!important;border-left-color:#6366f1!important}
 .job.st-loaded.wait-ship{opacity:1;border-left-color:#f0a500!important}
 .grp .bulk{margin-left:8px;padding:5px 10px;font-size:12px}
 .kpi.k4 .v{color:#555}
@@ -599,7 +601,7 @@ function setSrc(v){ fSrc.value=v; try{localStorage.setItem('pk_src',v);}catch(e)
 try{ const _s=localStorage.getItem('pk_src'); if(_s) document.getElementById('fSrc').value=_s; }catch(e){}
 function render(){
   const pend = JOBS.filter(j=>j.status==='pending'&&!isCvOnly(j)), urg = pend.filter(j=>j.priority>0),
-        pk = JOBS.filter(j=>j.status==='packed'), ld = JOBS.filter(j=>j.status==='loaded'&&!j.shippedAt);
+        pk = JOBS.filter(j=>j.status==='packed'||waitCntr(j)), ld = JOBS.filter(j=>j.status==='loaded'&&!j.shippedAt&&!isExp(j));
   const sum = (a,k)=>a.reduce((s,j)=>s+(+j[k]||0),0);
   kP.textContent=pend.length; kPs.textContent=fmt(sum(pend,'totalDoz'))+' โหล · ≈'+fmt(pend.reduce((s,j)=>s+estOf(j),0))+' กส.';
   { const uE=urg.filter(j=>j.source==='EXCEL').length, uP=urg.filter(j=>j.source==='PDF').length;
@@ -624,8 +626,8 @@ function render(){
     if(STATUS==='shipped' && !j.shippedAt) return false;
     if(STATUS==='pending' && !(j.status==='pending'&&!isCvOnly(j))) return false;
     if(STATUS==='urgent' && !(j.status==='pending'&&j.priority>0)) return false;
-    if(STATUS==='packed' && j.status!=='packed') return false;
-    if(STATUS==='loaded' && j.status!=='loaded') return false;
+    if(STATUS==='packed' && !(j.status==='packed'||waitCntr(j))) return false;
+    if(STATUS==='loaded' && !(j.status==='loaded'&&!waitCntr(j))) return false;
     if(src && j.source!==src) return false;
     if(trip && String(j.trip)!==trip) return false;
     if(dayF && jobDay(j)!==dayF) return false;
@@ -637,7 +639,7 @@ function render(){
   L.sort((a,b)=> rank(a)-rank(b) || (rank(a)===0? a.priority-b.priority:0) || String(a.trip||99).localeCompare(String(b.trip||99),undefined,{numeric:true}) || String(a.createdAt).localeCompare(String(b.createdAt)));
   const urgRank = {}; pend.filter(j=>j.priority>0).sort((a,b)=>a.priority-b.priority).forEach((j,i)=>urgRank[j.id]=i+1);
   // ---- group: ด่วน / เที่ยว / ส่งตรง / แพ็คเสร็จ / ขึ้นรถแล้ว ----
-  const gKey = j => j.status==='loaded'?(j.shippedAt?'z2|✅ ส่งแล้ว (ยืนยันจากรายงาน)':'z1|🚚 จัดรถแล้ว — รอยืนยันส่ง') : j.status==='packed'?'y|✅ แพ็คเสร็จ — รอขึ้นรถ'
+  const gKey = j => waitCntr(j)?'y2|🚢 ส่งออก ตปท. — แพ็คเสร็จ รอขึ้นตู้' : j.status==='loaded'?(j.shippedAt?'z2|✅ ส่งแล้ว (ยืนยันจากรายงาน)':'z1|🚚 จัดรถแล้ว — รอยืนยันส่ง') : j.status==='packed'?'y|✅ แพ็คเสร็จ — รอขึ้นรถ'
     : isCvOnly(j)?'w|👟 ผ้าใบ — ไม่ต้องแพ็คกระสอบ (รอจัดรถ)' : j.priority>0?(j.source==='PDF'?'a2|⚡ งานด่วน ส่งตรง — แพ็คก่อน':'a1|⚡ งานด่วน เอเยนต์ — แพ็คก่อน') : j.trip?('b|'+String(j.trip).padStart(3,'0')+'|🚚 เอเยนต์ เที่ยว '+j.trip+' · สั่งของเข้าโกดัง') : 'x|📄 งานส่งตรง (PDF) · ลงวันที่ตามหัวบิล';
   const today=dayKey(new Date());
   const SHIPV = STATUS==='shipped';
@@ -690,6 +692,9 @@ function cntrOf(j){
   const t=[j.sackName,j.note].filter(Boolean).join(' • ');
   const m=/ขึ้นตู้\s*(?:วันที่)?\s*(\d{1,2})\s*[\/\-\.]\s*(\d{1,2})(?:\s*[\/\-\.]\s*(\d{2,4}))?/.exec(t); return m?mkDate_(m):null;
 }
+/* งานส่งออก ตปท. ไม่ผ่านขั้นจัดรถ: แพ็คเสร็จ → รอขึ้นตู้ → ยืนยันส่งจากรายงาน */
+const isExp = j => !!cntrOf(j);
+const waitCntr = j => isExp(j) && !j.shippedAt && (j.status==='packed' || j.status==='loaded');
 function cntrBadge(j){
   const d=cntrOf(j); if(!d) return '';
   const t0=new Date(); t0.setHours(0,0,0,0); const diff=Math.round((d-t0)/864e5);
@@ -731,6 +736,10 @@ function jobCard(j, urgNo){
     quick = uBtn + (canPack()
       ? (isBig(j)?`<button class="qb q-prog" onclick="event.stopPropagation();openProg('${id}')">📈 คืบหน้า</button>`:'')+`<button class="qb q-pack" onclick="event.stopPropagation();openPack('${id}')">✅ แพ็คเสร็จ</button>`
       : stChip('⏳ รอแพ็ค','sc-wait'));
+  } else if(waitCntr(j)){
+    quick = `<span class="stchip sc-cntr">🚢 แพ็คเสร็จ · รอขึ้นตู้<small>ยืนยันส่งจากรายงานตอนเย็น</small></span>`;
+    if(canPack() && j.status==='packed') acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “แพ็คเสร็จ” กลับเป็นรอแพ็ค?')">↩ ยกเลิกแพ็คเสร็จ</button>`;
+    if(canLoad() && j.status==='loaded') acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ย้อนกลับเป็นแพ็คเสร็จ?')">↩ ย้อนเป็นแพ็คเสร็จ</button>`;
   } else if(j.status==='packed'){
     quick = canLoad() ? `<button class="qb q-load" onclick="event.stopPropagation();loadOne('${id}')">🚚 จัดรถแล้ว</button>` : stChip('✅ แพ็คเสร็จ','sc-pack');
     if(canPack()) acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “แพ็คเสร็จ” กลับเป็นรอแพ็ค?')">↩ ยกเลิกแพ็คเสร็จ</button>`;
@@ -749,7 +758,7 @@ function jobCard(j, urgNo){
         ? `<div class="big">${fmt(estOf(j))}<small> กส.</small></div><div class="sm">${boxesOf(j)?`<b style="color:#7c3aed">+ ${fmt(boxesOf(j))} กล่อง</b> · `:''}${fmt(j.totalDoz)} โหล</div>`
         : `<div class="big" style="color:#7c3aed">${fmt(boxesOf(j))}<small> กล่อง</small></div><div class="sm">${fmt(j.totalDoz)} โหล</div>`)
     : `<div class="big" style="color:var(--green)">${+j.packedSacks||!+j.packedBoxes?fmt(j.packedSacks)+'<small> กส.</small>':fmt(j.packedBoxes)+'<small> กล่อง</small>'}</div><div class="sm">${+j.packedSacks&&+j.packedBoxes?'+ '+fmt(j.packedBoxes)+' กล่อง · ':''}${fmt(j.totalDoz)} โหล</div>${j.packedAt?`<div class="pkd">📦 แพ็คเสร็จ ${tShort(j.packedAt)}${j.packedBy?' · '+esc(j.packedBy):''}</div>`:''}`;
-  return `<div class="job st-${j.status} ${j.status==='loaded'&&!j.shippedAt?'wait-ship':''} ${urgent?'urgent':''} ${open?'open':''}">
+  return `<div class="job st-${j.status} ${j.status==='loaded'&&!j.shippedAt&&!isExp(j)?'wait-ship':''} ${waitCntr(j)?'wait-cntr':''} ${urgent?'urgent':''} ${open?'open':''}">
     ${urgent?`<div class="uband"><b>⚡ งานด่วน #${urgNo} — แพ็คก่อน<em class="srcTag">${j.source==='PDF'?'🚚 ส่งตรง':'🏪 เอเยนต์'}</em></b> <span>ติดโดย ${esc(j.priorityBy)} ${tShort(j.priorityAt)}</span></div>`:''}
     <div class="jh" onclick="toggle('${id}')">
       <div class="chev">${open?'▾':'▸'}</div>
