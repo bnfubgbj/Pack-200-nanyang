@@ -273,6 +273,7 @@ table.rep select{font:inherit;font-size:12.5px;max-width:340px;margin-top:3px}
         <option value="">ทุกวัน</option><option value="today">วันนี้</option><option value="tmr">พรุ่งนี้</option><option value="yday">เมื่อวาน</option><option value="impToday">🆕 นำเข้าวันนี้</option><option value="pick">เลือกวันที่…</option></select>
       <input type="date" id="fDate" style="display:none;flex:0;min-width:150px" onchange="render()">
       <button class="chip" id="btnAll" onclick="toggleAll()">กางทั้งหมด</button>
+      <button class="chip" id="btnExp" style="display:none;background:linear-gradient(90deg,#0ea5e9,#6366f1);color:#fff;border:0" onclick="openExp()">⬇ Excel ส่งออก ตปท.</button>
       <input id="fQ" placeholder="🔍 ค้นหา ลูกค้า / SO / IFO / ชื่อกระสอบ" oninput="render()">
     </div>
     <div class="list" id="list"></div>
@@ -347,6 +348,14 @@ table.rep select{font:inherit;font-size:12.5px;max-width:340px;margin-top:3px}
   <div class="stepper"><button onclick="stepB(-1)">−</button><input id="pkB" class="bigin" type="number" inputmode="numeric" min="0" value="0"><button onclick="stepB(1)">+</button></div>
   <label>หมายเหตุ (ถ้ามี)</label><input id="pkNote" placeholder="เช่น ขาดเบอร์ 9 สีแดง 1 โหล">
   <div class="mact"><button class="btn btn-ghost" onclick="closeM('mPack')">ยกเลิก</button><button class="btn btn-pack" id="pkOk" onclick="confirmPack()">ยืนยันแพ็คเสร็จ</button></div>
+</div></div>
+
+<div class="mask" id="mExp"><div class="modal">
+  <h3>🚢 Excel งานส่งออก ตปท.</h3><div class="sub">รวมทุกใบของรอบที่เลือก ทั้งแพ็คแล้วและยังไม่แพ็ค แยกสี × เบอร์</div>
+  <label>รอบขึ้นตู้</label><select id="expRound"></select>
+  <label>เป้ารอบนี้ (คู่) — ถ้ามี</label><input id="expTarget" type="number" inputmode="numeric" placeholder="เช่น 61200">
+  <div style="font-size:12.5px;color:var(--mute);margin-top:6px" id="expInfo"></div>
+  <div class="mact"><button class="btn btn-ghost" onclick="closeM('mExp')">ยกเลิก</button><button class="btn btn-load" onclick="doExp()">⬇ ดาวน์โหลด Excel</button></div>
 </div></div>
 
 <div class="mask" id="mProg"><div class="modal">
@@ -701,6 +710,98 @@ const EXPORT_NAMES=['SASINEE'];  // ชื่อลูกค้าส่งอ�
 const normCode = c => String(c||'').replace(/[\s\u200b]/g,'').replace(/[๐-๙]/g,d=>'๐๑๒๓๔๕๖๗๘๙'.indexOf(d)).toLowerCase();
 const isExp = j => !!cntrOf(j) || (!!j.custCode && [...expCodes()].some(c=>normCode(c)===normCode(j.custCode))) || EXPORT_NAMES.some(n=>String(j.custName||'').toUpperCase().includes(n));
 const waitCntr = j => isExp(j) && !j.shippedAt && (j.status==='packed' || j.status==='loaded');
+/* ===== Excel ส่งออก (เห็นเฉพาะ ต่อ) ===== */
+const EXPORT_VIEWERS=['ต่อ'];
+const roundKey = j => { const d=cntrOf(j); return d?dayKey(d):''; };
+const targetOf = j => { const m=/ทั้งหมด\s*([\d,]+)\s*โหล/.exec([j.sackName,j.note].join(' ')); return m?+m[1].replace(/,/g,''):0; };
+function expJobs(){ return JOBS.filter(isExp); }
+function expRounds(){
+  const by={}; expJobs().forEach(j=>{ const k=roundKey(j)||'-'; (by[k]=by[k]||[]).push(j); });
+  return Object.keys(by).sort().reverse().map(k=>({k,jobs:by[k]}));
+}
+function rLabel(k){ if(k==='-') return 'ไม่ระบุรอบ'; const [y,m,d]=k.split('-'); return `${d}/${m}/${String(+y+543).slice(2)}`; }
+function openExp(){
+  const rs=expRounds(); if(!rs.length) return toast('ไม่มีงานส่งออก ตปท. ในแอป');
+  expRound.innerHTML=rs.map(r=>`<option value="${r.k}">รอบขึ้นตู้ ${rLabel(r.k)} · ${r.jobs.length} ใบ</option>`).join('')+(rs.length>1?'<option value="*">ทุกรอบรวมกัน</option>':'');
+  expRound.onchange=expUpd; expUpd(); openM('mExp'); }
+function expSel(){ const k=expRound.value; return k==='*'?expJobs():(expRounds().find(r=>r.k===k)||{jobs:[]}).jobs; }
+function expUpd(){ const js=expSel(); const t=Math.max(0,...js.map(targetOf))*12; expTarget.value=t||'';
+  const P=a=>a.reduce((s,j)=>s+foamItems(j).reduce((x,i)=>x+(+i.qty||0),0),0);
+  const all=P(js), pk=P(js.filter(j=>j.status!=='pending'));
+  expInfo.textContent=`ในแอป ${js.length} ใบ · ${fmt(all)} คู่ (แพ็คแล้ว ${fmt(pk)} · ยังไม่แพ็ค ${fmt(all-pk)})`+(t?` · เป้า ${fmt(t)} คู่ → ยังขาด ${fmt(t-all)} คู่`:''); }
+/* โหลด xlsx-js-style (รองรับสี/เส้น) เฉพาะตอน export — ไม่ทับ XLSX ตัวหลักที่ใช้อ่านไฟล์ */
+let XS=null;
+function loadXS(){ if(XS) return Promise.resolve(XS);
+  return new Promise((ok,bad)=>{ const keep=window.XLSX, sc=document.createElement('script');
+    sc.src=XS_URL; sc.onload=()=>{ XS=window.XLSX; window.XLSX=keep; ok(XS); }; sc.onerror=()=>{ window.XLSX=keep; bad(new Error('โหลดตัวสร้าง Excel ไม่ได้')); };
+    document.head.appendChild(sc); }); }
+const XS_URL='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';
+const XL_FILL={'น้ำเงิน':'DBE4F5','น้ำเงินเข้ม':'C9D3EE','น้ำเงินอ่อน':'E3EEFD','เขียว':'DDF3E4','แดง':'FBE0E0','เหลือง':'FFF6CC','ขาว':'FFFFFF','ดำ':'E5E5E5','เทา':'EEF0F3','ดำ/ขาว':'EFEFEF','น้ำตาล':'F1E4D8'};
+async function doExp(){
+  const js=expSel(); if(!js.length) return toast('ไม่มีข้อมูล');
+  let X; try{ X=await loadXS(); }catch(e){ return toast('⚠ '+e.message); }
+  const target=+expTarget.value||0, rk=expRound.value, rl=rk==='*'?'ทุกรอบ':rLabel(rk);
+  const items=js.flatMap(j=>foamItems(j).map(i=>Object.assign({},i,{_pk:j.status!=='pending'})));
+  const sizes=[...new Set(items.map(i=>String(i.size)))].sort(sizeSort), colors=[...new Set(items.map(i=>i.color))].sort(colorSort);
+  const pairs=a=>a.reduce((s,i)=>s+(+i.qty||0),0);
+  const all=pairs(items), pk=pairs(items.filter(i=>i._pk)), npk=all-pk;
+  const W=sizes.length+2;                               // คอลัมน์: สี + เบอร์… + รวม
+  const B={style:'thin',color:{rgb:'C9CED6'}}, BOR={top:B,bottom:B,left:B,right:B};
+  const NUM='#,##0;-#,##0;"-"';
+  const cell=(v,s)=>({v, t: typeof v==='number'?'n':'s', s:Object.assign({font:{name:'Tahoma',sz:11},alignment:{vertical:'center'}},s||{})});
+  const rows=[], merges=[];
+  const put=(r)=>{ rows.push(r); return rows.length-1; };
+  // หัวรายงาน
+  let r=put([cell(`🚢 งานส่งออก ตปท. — รอบขึ้นตู้ ${rl}`,{font:{name:'Tahoma',sz:16,bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'4F46E5'}},alignment:{vertical:'center'}})]);
+  merges.push({s:{r,c:0},e:{r,c:W-1}});
+  r=put([cell(`ลูกค้า: ${[...new Set(js.map(j=>j.custName))].join(', ')} · พิมพ์ ${tShort(nowIso())} โดย ${USER?USER.name:''}`,{font:{name:'Tahoma',sz:10,italic:true,color:{rgb:'4B5563'}}})]);
+  merges.push({s:{r,c:0},e:{r,c:W-1}}); put([]);
+  // กล่องสรุป (หน่วย: คู่)
+  const kpi=(label,val,bg,fg,big)=>{ const i=put([cell(label,{font:{name:'Tahoma',sz:big?12:11,bold:!!big,color:{rgb:fg}},fill:{fgColor:{rgb:bg}},border:BOR}), cell(val,{font:{name:'Tahoma',sz:big?14:12,bold:true,color:{rgb:fg}},fill:{fgColor:{rgb:bg}},border:BOR,numFmt:NUM,alignment:{horizontal:'right'}}), cell('คู่',{font:{name:'Tahoma',sz:10,color:{rgb:fg}},fill:{fgColor:{rgb:bg}},border:BOR})]); return i; };
+  kpi('🎯 เป้ารอบนี้', target||'-', 'EEF2FF','3730A3',true);
+  kpi('📥 นำเข้าแอปแล้ว', all, 'F1F5F9','1E293B');
+  kpi('   ✅ แพ็คแล้ว', pk, 'E7F6EC','15803D');
+  kpi('   ⏳ ยังไม่แพ็ค', npk, 'FFF4E0','B45309');
+  kpi('🏭 ยังต้องดึงจากโรงงานอีก', target?target-all:'ใส่เป้าเพื่อคำนวณ', target&&target-all>0?'FDECEC':'E7F6EC', target&&target-all>0?'B91C1C':'15803D',true);
+  put([]);
+  // ตารางสี × เบอร์
+  const table=(f,title,hd)=>{
+    const q={}; items.filter(f).forEach(i=>{const k=i.color+'|'+i.size;q[k]=(q[k]||0)+(+i.qty||0);});
+    let i=put([cell(title,{font:{name:'Tahoma',sz:12,bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:hd}}})]); merges.push({s:{r:i,c:0},e:{r:i,c:W-1}});
+    const hs={font:{name:'Tahoma',sz:11,bold:true,color:{rgb:'1F2937'}},fill:{fgColor:{rgb:'F3F4F6'}},border:BOR,alignment:{horizontal:'center',vertical:'center'}};
+    put([cell('สี / เบอร์',hs),...sizes.map(s=>cell(s,hs)),cell('รวม (คู่)',hs)]);
+    colors.forEach(c=>{ const v=sizes.map(s=>q[c+'|'+s]||0), t=v.reduce((a,b)=>a+b,0); const bg=XL_FILL[c]||'FFFFFF';
+      put([cell(c,{font:{name:'Tahoma',sz:11,bold:true},fill:{fgColor:{rgb:bg}},border:BOR}), ...v.map(x=>cell(x,{border:BOR,numFmt:NUM,alignment:{horizontal:'center'},font:{name:'Tahoma',sz:11,color:{rgb:x?'111827':'9CA3AF'}}})), cell(t,{border:BOR,numFmt:NUM,alignment:{horizontal:'center'},font:{name:'Tahoma',sz:11,bold:true},fill:{fgColor:{rgb:'F9FAFB'}}})]); });
+    const tot=sizes.map(s=>colors.reduce((a,c)=>a+(q[c+'|'+s]||0),0)), tt=tot.reduce((a,b)=>a+b,0);
+    const ts={font:{name:'Tahoma',sz:11,bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:hd}},border:BOR,numFmt:NUM,alignment:{horizontal:'center'}};
+    put([cell('รวม',ts),...tot.map(x=>cell(x,ts)),cell(tt,ts)]); put([]); };
+  table(()=>true,'① รวมทั้งหมดในแอป (คู่)','1F3A5F');
+  table(i=>i._pk,'② แพ็คแล้ว (คู่)','15803D');
+  table(i=>!i._pk,'③ ยังไม่แพ็ค (คู่)','D97706');
+  const ws=X.utils.aoa_to_sheet(rows.map(rw=>rw.map(c=>c.v)));
+  rows.forEach((rw,ri)=>rw.forEach((c,ci)=>{ const a=X.utils.encode_cell({r:ri,c:ci}); if(ws[a]) ws[a].s=c.s; if(ws[a]&&c.s.numFmt) ws[a].z=c.s.numFmt; }));
+  ws['!merges']=merges; ws['!cols']=[{wch:30},...sizes.map(()=>({wch:10})),{wch:12}];
+  ws['!rows']=rows.map((_,i)=>i===0?{hpt:28}:{hpt:19});
+  const wb=X.utils.book_new(); X.utils.book_append_sheet(wb,ws,'สรุปสี-เบอร์');
+  // ชีตรายการ
+  const st=j=>j.shippedAt?'🚢 ขึ้นตู้แล้ว '+shipD(j.shippedAt):j.status==='pending'?'⏳ ยังไม่แพ็ค':'✅ แพ็คแล้ว รอขึ้นตู้';
+  const stc=j=>j.shippedAt?['E0E7FF','3730A3']:j.status==='pending'?['FFF4E0','B45309']:['E7F6EC','15803D'];
+  const H=['#','ลูกค้า','SO / เลขที่','รอบขึ้นตู้','วันที่ใบเบิก','สถานะ','จำนวน (คู่)','กส.','แพ็คเสร็จ','หมายเหตุ'];
+  const L=js.map((j,i)=>[i+1,j.custName,j.docNo||j.id,roundKey(j)?rLabel(roundKey(j)):'-',shortDocDate(j.docDate||''),st(j),pairs(foamItems(j)),j.status==='pending'?estOf(j):(+j.packedSacks||0),j.packedAt?tShort(j.packedAt)+' '+(j.packedBy||''):'',j.note||'']);
+  const sumP=L.reduce((s,x)=>s+x[6],0);
+  const ws2=X.utils.aoa_to_sheet([H,...L,['','รวม','','','','',sumP,'','','']]);
+  const hs2={font:{name:'Tahoma',sz:11,bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'4F46E5'}},border:BOR,alignment:{horizontal:'center',vertical:'center',wrapText:true}};
+  H.forEach((_,c)=>{ ws2[X.utils.encode_cell({r:0,c})].s=hs2; });
+  L.forEach((x,i)=>{ const [bg,fg]=stc(js[i]); const zebra=i%2?'FAFAFA':'FFFFFF';
+    x.forEach((_,c)=>{ const a=X.utils.encode_cell({r:i+1,c}); if(!ws2[a]) return;
+      ws2[a].s={font:{name:'Tahoma',sz:11,bold:c===5,color:{rgb:c===5?fg:'111827'}},fill:{fgColor:{rgb:c===5?bg:zebra}},border:BOR,alignment:{vertical:'center',horizontal:[0,3,4,7].includes(c)?'center':c===6?'right':'left',wrapText:c===9}};
+      if(c===6) ws2[a].z=NUM; }); });
+  for(let c=0;c<H.length;c++){ const a=X.utils.encode_cell({r:L.length+1,c}); if(ws2[a]) { ws2[a].s={font:{name:'Tahoma',sz:11,bold:true},fill:{fgColor:{rgb:'E5E7EB'}},border:BOR,alignment:{horizontal:c===6?'right':'left'}}; if(c===6) ws2[a].z=NUM; } }
+  ws2['!cols']=[{wch:4},{wch:30},{wch:16},{wch:11},{wch:14},{wch:22},{wch:12},{wch:7},{wch:17},{wch:48}];
+  ws2['!rows']=[{hpt:24}];
+  X.utils.book_append_sheet(wb,ws2,'รายการใบเบิก');
+  X.writeFile(wb,`ส่งออก_รอบขึ้นตู้_${rl.replace(/\//g,'-')}.xlsx`); closeM('mExp'); toast('⬇ ดาวน์โหลด Excel แล้ว'); }
+
 function cntrBadge(j){
   const d=cntrOf(j); if(!d) return isExp(j) ? `<span class="cntr ${j.shippedAt?'done':''}">🚢 ส่งออก ตปท.${j.shippedAt?' <b>ส่งแล้ว</b>':''}</span>` : '';
   const t0=new Date(); t0.setHours(0,0,0,0); const diff=Math.round((d-t0)/864e5);
@@ -1224,7 +1325,7 @@ async function doLogin(){
   finally{ loginBtn.disabled=false; loginBtn.textContent='เข้าสู่ระบบ'; }
 }
 function logout(expired){ USER=null; try{localStorage.removeItem('pk_auth')}catch(e){} JOBS=[]; applyUser(); openUser(); if(expired) loginErr.textContent='รหัสผ่านถูกเปลี่ยน หรือหมดสิทธิ์ — กรุณาเข้าสู่ระบบใหม่'; }
-function applyUser(){ if(window.bellBtn&&typeof drawBell==='function') try{drawBell()}catch(e){}; uName.textContent=USER?USER.name:'-'; uRole.textContent=USER?'ออกจากระบบ':'เข้าสู่ระบบ';
+function applyUser(){ try{ btnExp.style.display = (USER&&EXPORT_VIEWERS.includes(USER.name))?'':'none'; }catch(e){} if(window.bellBtn&&typeof drawBell==='function') try{drawBell()}catch(e){}; uName.textContent=USER?USER.name:'-'; uRole.textContent=USER?'ออกจากระบบ':'เข้าสู่ระบบ';
   demoBar.style.display=isDemo()?'':'none'; render(); }
 function whoClick(){ if(USER){ if(confirm('ออกจากระบบ?')) logout(); } else openUser(); }
 
