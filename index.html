@@ -635,7 +635,7 @@ function render(){
   const SHIPV = STATUS==='shipped';
   const dOf = j => SHIPV ? (String(j.shippedAt||'').slice(0,10)||'0000-00-00') : (jobDay(j)||'0000-00-00');
   const byDay={}; L.forEach(j=>{const d=dOf(j);(byDay[d]=byDay[d]||[]).push(j);});
-  const days=Object.keys(byDay).sort(); if(SHIPV) days.reverse(); // ส่งแล้ว: ล่าสุดก่อน / ยังไม่ส่ง: เก่า → ใหม่
+  const days=Object.keys(byDay).sort().reverse(); // วันที่ล่าสุดอยู่บน
   const html = days.map(d=>{
     const dj=byDay[d], pendN=dj.filter(j=>j.status==='pending'&&!isCvOnly(j)).length, old = d<today && pendN>0;
     const groups={}; dj.forEach(j=>{(groups[gKey(j)]=groups[gKey(j)]||[]).push(j);});
