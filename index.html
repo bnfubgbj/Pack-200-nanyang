@@ -163,6 +163,7 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .sc-ship{background:#e7f6ec;color:#1f7a3a;line-height:1.35}.sc-ship small{font-weight:600;font-size:12px;color:#2f6b45}
 .sc-cntr{background:linear-gradient(90deg,#e0f2fe,#ede9fe);color:#4338ca;border:1px solid #c7d2fe}.sc-cntr small{font-size:11.5px;font-weight:600;color:#6366f1}
 .qb.q-cntr{background:linear-gradient(90deg,#0ea5e9,#6366f1);color:#fff;min-width:150px}
+.ocrz{border:2px dashed #a5b4fc;background:#eef2ff;border-radius:12px;padding:12px;text-align:center;cursor:pointer;margin-top:12px;font-size:13.5px;color:#3730a3}.ocrz small{color:#6366f1}.ocrz.busy{opacity:.7;cursor:wait}
 .ogw{overflow-x:auto}.ogw table{border-collapse:collapse;font-size:13px;width:100%}
 .ogw th,.ogw td{border:1px solid var(--line);padding:3px 4px;text-align:center}.ogw th{background:#f3f4f6;font-weight:600}
 .ogw td.c{text-align:left;white-space:nowrap;font-weight:600;padding:3px 8px}
@@ -360,7 +361,9 @@ table.rep select{font:inherit;font-size:12.5px;max-width:340px;margin-top:3px}
 <div class="mask" id="mExp"><div class="modal" style="max-width:760px;max-height:92vh;overflow:auto">
   <h3>🚢 Excel งานส่งออก ตปท.</h3><div class="sub">รวมทุกใบของรอบที่เลือก ทั้งแพ็คแล้วและยังไม่แพ็ค แยกสี × เบอร์</div>
   <label>รอบขึ้นตู้</label><select id="expRound"></select>
-  <label>ยอดสั่ง export รอบนี้ (หน่วย <b>โหล</b> ตามการ์ด Teams) — ใส่แล้วแอปจำไว้ให้</label>
+  <div class="ocrz" id="ocrZ" onclick="ocrFile.click()">📸 <b>วางภาพการ์ด Teams ของฝ่าย export</b> (แคปหน้าจอแล้วกด <b>Ctrl+V</b> ที่นี่ / ลากภาพมาวาง / แตะเลือกภาพ)<br><small>แอปอ่านตัวเลขสี × เบอร์ให้เอง — ตรวจทานกับการ์ดอีกครั้งก่อนดาวน์โหลด</small>
+    <input type="file" id="ocrFile" accept="image/*" style="display:none" onchange="ocrImage(this.files[0]);this.value=''"></div>
+  <label>ยอดสั่ง export รอบนี้ (หน่วย <b>โหล</b> ตามการ์ด Teams) — อ่านจากภาพ หรือพิมพ์แก้ได้</label>
   <div class="ogw" id="ogBox"></div>
   <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><span style="font-size:12.5px;color:var(--mute)">ไม่ได้ใส่ตาราง ใช้เป้ารวม (คู่):</span><input id="expTarget" type="number" inputmode="numeric" placeholder="เช่น 61200" style="max-width:140px"><button class="btn btn-ghost" style="padding:6px 10px;font-size:12.5px" onclick="clearOrd()">ล้างตาราง</button></div>
   <div style="font-size:12.5px;color:var(--mute);margin-top:6px" id="expInfo"></div>
@@ -734,6 +737,75 @@ function openExp(){
   expRound.innerHTML=rs.map(r=>`<option value="${r.k}">รอบขึ้นตู้ ${rLabel(r.k)} · ${r.jobs.length} ใบ</option>`).join('')+(rs.length>1?'<option value="*">ทุกรอบรวมกัน</option>':'');
   expRound.onchange=expUpd; expUpd(); openM('mExp'); }
 function expSel(){ const k=expRound.value; return k==='*'?expJobs():(expRounds().find(r=>r.k===k)||{jobs:[]}).jobs; }
+/* ===== อ่านภาพการ์ด Teams (OCR ฟรีในเครื่อง — Tesseract) ===== */
+const TESS_URL='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js', TESS_OPTS={};
+let TESS=null;
+function loadTess(){ if(window.Tesseract) return Promise.resolve(window.Tesseract);
+  return new Promise((ok,bad)=>{ const sc=document.createElement('script'); sc.src=TESS_URL; sc.onload=()=>ok(window.Tesseract); sc.onerror=()=>bad(new Error('โหลดตัวอ่านภาพไม่ได้')); document.head.appendChild(sc); }); }
+async function loadImg(file){ const url=URL.createObjectURL(file); const im=new Image(); await new Promise((a,b)=>{im.onload=a;im.onerror=b;im.src=url;}); return im; }
+/* ขยายภาพ + ทำขาวดำ ช่วยให้อ่านตัวเลขแม่นขึ้น */
+function prep(im,k,thr){ k=Math.min(k, 3200/im.width); const c=document.createElement('canvas'); c.width=Math.round(im.width*k); c.height=Math.round(im.height*k);
+  const g=c.getContext('2d'); g.imageSmoothingQuality='high'; g.drawImage(im,0,0,c.width,c.height);
+  const d=g.getImageData(0,0,c.width,c.height), a=d.data;
+  for(let i=0;i<a.length;i+=4){ let y=0.299*a[i]+0.587*a[i+1]+0.114*a[i+2]; if(thr) y=y>thr?255:0; a[i]=a[i+1]=a[i+2]=y; }
+  g.putImageData(d,0,0); return c; }
+const OCR_COLOR={blue:'น้ำเงิน',green:'เขียว',red:'แดง',yellow:'เหลือง',white:'ขาว',black:'ดำ',grey:'เทา',gray:'เทา',simple:'ดำ/ขาว'};
+const OCR_MON={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+/* แปลงบรรทัด OCR → {สี|เบอร์: โหล} ใช้ยอดรวมท้ายแถวตรวจว่าอ่านถูก */
+function parseOrderText(text){
+  const sizes=OG_SIZES, out={}, rows=[]; let date='', bad=[];
+  const dm=/(\d{1,2})\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*(\d{2,4})/i.exec(text);
+  if(dm){ let y=+dm[3]; if(y<100) y+=2000; if(y>2400) y-=543; date=`${y}-${String(OCR_MON[dm[2].toLowerCase()]).padStart(2,'0')}-${dm[1].padStart(2,'0')}`; }
+  text.split(/\n/).forEach(line=>{
+    const m=/\b(blue|green|red|yellow|white|black|gr[ae]y|simple)\b(.*)$/i.exec(line); if(!m) return;
+    const col=OCR_COLOR[m[1].toLowerCase()];
+    let tk=m[2].trim().split(/\s+/).filter(Boolean);
+    if(tk.length>7) tk=tk.slice(-7);
+    const num=t=>{ const v=t.replace(/[,.]/g,''); return /^\d+$/.test(v)?+v:0; };
+    const isDash=t=>!/\d/.test(t) || /^\d$/.test(t);         // "-" ที่ OCR อ่านเป็น = / L / 5 ฯลฯ
+    if(tk.length<7){ if(tk.some(t=>/\d{2,}/.test(t))) bad.push(col); return; }
+    const total=isDash(tk[6])?0:num(tk[6]);
+    let vals=tk.slice(0,6).map(t=>isDash(t)?0:num(t));
+    if(vals.reduce((a,b)=>a+b,0)!==total){ const v2=tk.slice(0,6).map(num); if(v2.reduce((a,b)=>a+b,0)===total) vals=v2; else bad.push(col); }
+    vals.forEach((v,i)=>{ if(v) out[col+'|'+sizes[i]]=v; });
+    rows.push({col,vals,total});
+  });
+  const tl=text.split(/\n/).filter(l=>/^\W*total\b/i.test(l)).pop()||'';
+  let grand=0, colTot=null;
+  { let tk=tl.replace(/^\W*total\b/i,'').trim().split(/\s+/).filter(Boolean); if(tk.length>7) tk=tk.slice(-7);
+    const num=t=>{ const v=t.replace(/[,.]/g,''); return /^\d+$/.test(v)?+v:0; }, isDash=t=>!/\d/.test(t)||/^\d$/.test(t);
+    if(tk.length){ grand=num(tk[tk.length-1]); }
+    if(tk.length===7){ colTot=tk.slice(0,6).map(t=>isDash(t)?0:num(t)); } }
+  // ซ่อมแถวที่อ่านผิด ด้วยยอดรวมแต่ละเบอร์ (แถว Total) — ได้เมื่อมีแถวผิดแถวเดียว
+  if(colTot && bad.length===1){ const bc=bad[0];
+    sizes.forEach((z,i)=>{ const others=rows.filter(r=>r.col!==bc).reduce((a,r)=>a+(r.vals[i]||0),0); const v=colTot[i]-others; if(v>0) out[bc+'|'+z]=v; else delete out[bc+'|'+z]; });
+    const row=rows.find(r=>r.col===bc); const rs=sizes.reduce((a,z)=>a+(out[bc+'|'+z]||0),0); if(!row||rs===row.total) bad=[]; }
+  const sum=Object.values(out).reduce((a,b)=>a+b,0);
+  return {out,date,bad,grand,sum,rows};
+}
+async function ocrImage(file){
+  if(!file||!/^image\//.test(file.type)) return toast('⚠ ต้องเป็นไฟล์ภาพ');
+  ocrZ.classList.add('busy'); ocrZ.firstChild.textContent='⏳ กำลังอ่านภาพ… (ครั้งแรกอาจใช้ 10–20 วินาที) ';
+  try{
+    const T=await loadTess(); const im=await loadImg(file);
+    const w=await T.createWorker('eng',1,TESS_OPTS); await w.setParameters({tessedit_pageseg_mode:'6'});
+    let p=null;
+    for(const [k,thr] of [[3,0],[2,170],[3,170],[2,0]]){       // ลองหลายแบบ จนยอดรวมทุกแถวตรงกับการ์ด
+      const q=parseOrderText((await w.recognize(prep(im,k,thr))).data.text);
+      const good = Object.keys(q.out).length && !q.bad.length && (!q.grand || q.sum===q.grand);
+      if(!p || good || (q.bad.length<p.bad.length && Object.keys(q.out).length)) p=q;
+      if(good) break; }
+    await w.terminate();
+    if(!Object.keys(p.out).length) throw new Error('อ่านตาราง สี × เบอร์ ไม่พบ — ลองแคปให้เห็นตารางชัด ๆ');
+    if(p.date){ const opt=[...expRound.options].find(o=>o.value===p.date); if(opt) expRound.value=p.date; else toast(`⚠ ในแอปยังไม่มีรอบขึ้นตู้ ${rLabel(p.date)} — บันทึกเข้ารอบที่เลือกอยู่`,4500); }
+    LS.set(ordKey(),p.out); expUpd();
+    const okSum = p.grand ? p.sum===p.grand : true;
+    toast(`📸 อ่านได้ ${Object.keys(p.out).length} ช่อง · รวม ${fmt(p.sum)} โหล`+(p.grand?(okSum?` ✓ ตรงกับยอดรวมในการ์ด`:` ⚠ การ์ดรวม ${fmt(p.grand)} โหล — ตรวจแก้ช่องที่ผิด`):'')+(p.bad.length?`\n⚠ ตรวจแถว: ${p.bad.join(', ')}`:''), 6000);
+  }catch(e){ toast('⚠ '+e.message,5000); }
+  finally{ ocrZ.classList.remove('busy'); ocrZ.firstChild.textContent='📸 '; }
+}
+document.addEventListener('paste',ev=>{ if(!document.getElementById('mExp').classList.contains('on')) return;
+  const it=[...(ev.clipboardData&&ev.clipboardData.items||[])].find(i=>i.type.startsWith('image/')); if(it){ ev.preventDefault(); ocrImage(it.getAsFile()); } });
 const OG_COLORS=['น้ำเงิน','เขียว','แดง','เหลือง','ขาว','ดำ','เทา','ดำ/ขาว'], OG_SIZES=['8.5','9','9.5','10','10.5','11'];
 const ordKey=()=>'pk_exp_ord_'+expRound.value;
 function getOrd(){ return LS.get(ordKey(),{}); }            // {'เหลือง|9.5': โหล}
@@ -1065,6 +1137,7 @@ async function routeFiles(files){
 }
 function dropAny(ev){
   document.body.classList.remove('dragging');
+  if(document.getElementById('mExp').classList.contains('on')){ const im=[...(ev.dataTransfer.files||[])].find(f=>/^image\//.test(f.type)); if(im) return ocrImage(im); }
   const files=[...(ev.dataTransfer.files||[])].filter(f=>/\.(xlsx|xls|xlsm|pdf)$/i.test(f.name));
   if(files.length){ routeFiles(files); return; }
   toast('⚠ ลากจากอีเมลตรงๆ ไม่ได้ — กด Download ไฟล์ในอีเมลก่อน แล้วลากจากแถบดาวน์โหลด (Ctrl+J) มาวางแทน',6000);
