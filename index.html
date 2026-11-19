@@ -163,8 +163,11 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .sc-ship{background:#e7f6ec;color:#1f7a3a;line-height:1.35}.sc-ship small{font-weight:600;font-size:12px;color:#2f6b45}
 .sc-cntr{background:linear-gradient(90deg,#e0f2fe,#ede9fe);color:#4338ca;border:1px solid #c7d2fe}.sc-cntr small{font-size:11.5px;font-weight:600;color:#6366f1}
 .qb.q-cntr{background:linear-gradient(90deg,#0ea5e9,#6366f1);color:#fff;min-width:150px}
-.xpop{display:none;position:absolute;z-index:40;background:#fff;border:1px solid #c7d2fe;border-radius:12px;box-shadow:0 10px 30px #0003;padding:10px 12px;min-width:330px;font-size:13px}
-.xpop.on{display:block}.xpop h4{margin:0 0 6px;font-size:13.5px;color:#3730a3}
+.xpop{display:none;position:absolute;z-index:40;background:#fff;border:1px solid #c7d2fe;border-radius:12px;box-shadow:0 10px 30px #0003;padding:10px 12px;min-width:380px;max-width:520px;font-size:13px}
+.xpop.on{display:block}.xpop{cursor:pointer;user-select:none}.xpop.pin{cursor:move;border:2px solid #6366f1}
+.xclose{position:absolute;top:6px;right:8px;border:0;background:#eef2ff;color:#3730a3;border-radius:6px;width:24px;height:24px;cursor:pointer;font-size:13px}
+.xpop h4{padding-right:30px}
+.xhint{font-size:11px;color:#6366f1;margin:0 30px 4px 0}.xpop.pin .xhint{display:none}.xpop h4{margin:0 0 6px;font-size:13.5px;color:#3730a3}
 .xpop table{border-collapse:collapse;width:100%;margin-bottom:8px}.xpop th,.xpop td{border-bottom:1px solid #eef0f4;padding:3px 6px;text-align:right}.xpop th{color:#6b7280;font-weight:600;font-size:12px}
 .xpop td.c{text-align:left;font-weight:600}.xpop .need{color:#b91c1c;font-weight:700}.xpop .ok{color:#15803d;font-weight:700}.xpop tr.t td{font-weight:700;border-top:2px solid #e5e7eb}
 .ocrz{border:2px dashed #a5b4fc;background:#eef2ff;border-radius:12px;padding:12px;text-align:center;cursor:pointer;margin-top:12px;font-size:13.5px;color:#3730a3}.ocrz small{color:#6366f1}.ocrz.busy{opacity:.7;cursor:wait}
@@ -286,7 +289,7 @@ table.rep select{font:inherit;font-size:12.5px;max-width:340px;margin-top:3px}
       <input type="date" id="fDate" style="display:none;flex:0;min-width:150px" onchange="render()">
       <button class="chip" id="btnAll" onclick="toggleAll()">กางทั้งหมด</button>
       <button class="chip" id="btnExp" style="display:none;background:linear-gradient(90deg,#0ea5e9,#6366f1);color:#fff;border:0" onclick="openExp()" onmouseenter="showExpPop(this)" onmouseleave="hideExpPop()">⬇ Excel ส่งออก ตปท.</button>
-      <div id="expPop" class="xpop"></div>
+      <div id="expPop" class="xpop" onmouseenter="clearTimeout(POP_T)" onmouseleave="hideExpPop()" onmousedown="popDown(event)"></div>
       <input id="fQ" placeholder="🔍 ค้นหา ลูกค้า / SO / IFO / ชื่อกระสอบ" oninput="render()">
     </div>
     <div class="list" id="list"></div>
@@ -740,23 +743,35 @@ function rLabel(k){ if(k==='-') return 'ไม่ระบุรอบ'; const [
 /* ป้อปอัปตอนชี้เมาส์ที่ปุ่ม: ยอดสั่ง export / ในแอป / ยังค้าง (คู่) ทุกรอบที่ใส่ยอดสั่งไว้ */
 function showExpPop(btn){
   const rs=expRounds().filter(r=>r.k!=='-' && (r.jobs.some(j=>!j.shippedAt) || Object.keys(LS.get('pk_exp_ord_'+r.k,{})).length) && r.k>=dayKey(new Date(Date.now()-3*864e5))); let html='';
-  rs.forEach(r=>{ const o=LS.get('pk_exp_ord_'+r.k,{}); const keys=Object.keys(o); const have=inAppPairs(r.jobs);
-    const cols=[...new Set([...keys.map(k=>k.split('|')[0]), ...Object.keys(have).map(k=>k.split('|')[0])])].sort(colorSort);
-    let tO=0,tH=0,tN=0;
-    const rowsH=cols.map(c=>{ const ord=keys.filter(k=>k.startsWith(c+'|')).reduce((a,k)=>a+o[k]*12,0);
-      const hv=Object.keys(have).filter(k=>k.startsWith(c+'|')).reduce((a,k)=>a+have[k],0);
-      const nd=keys.filter(k=>k.startsWith(c+'|')).reduce((a,k)=>a+Math.max(0,o[k]*12-(have[k]||0)),0);
-      tO+=ord; tH+=hv; tN+=nd;
-      return `<tr><td class="c">${dot(c)}${esc(c)}</td><td>${ord?fmt(ord):'-'}</td><td>${fmt(hv)}</td><td class="${keys.length?(nd>0?'need':'ok'):''}">${keys.length?(nd>0?fmt(nd):'ครบ ✓'):'-'}</td></tr>`; }).join('');
-    html+=`<h4>🚢 รอบขึ้นตู้ ${rLabel(r.k)} · ${r.jobs.length} ใบ${keys.length?'':' <small style="color:#b45309">(ยังไม่ใส่ยอดสั่ง)</small>'}</h4>
-      <table><tr><th style="text-align:left">สี</th><th>export สั่ง (คู่)</th><th>ในแอป (คู่)</th><th>ยังค้าง (คู่)</th></tr>${rowsH}
-      <tr class="t"><td class="c">รวม</td><td>${tO?fmt(tO):'-'}</td><td>${fmt(tH)}</td><td class="${keys.length?(tN>0?'need':'ok'):''}">${keys.length?(tN>0?fmt(tN):'ครบ ✓'):'-'}</td></tr></table>`; });
+  rs.forEach(r=>{ const o=LS.get('pk_exp_ord_'+r.k,{}), keys=Object.keys(o), have=inAppPairs(r.jobs);
+    if(!keys.length){ html+=`<h4>🚢 รอบขึ้นตู้ ${rLabel(r.k)} · ${r.jobs.length} ใบ</h4><div style="color:#b45309;margin-bottom:10px">ยังไม่ใส่ยอดสั่ง export — กดปุ่มแล้ววางภาพการ์ด Teams</div>`; return; }
+    const need={}; keys.forEach(k=>{ const n=o[k]*12-(have[k]||0); if(n>0) need[k]=n; });
+    const sizes=[...new Set(keys.map(k=>k.split('|')[1]))].sort(sizeSort), cols=[...new Set(keys.map(k=>k.split('|')[0]))].sort(colorSort);
+    const tot=Object.values(need).reduce((a,b)=>a+b,0), ordT=keys.reduce((a,k)=>a+o[k]*12,0);
+    html+=`<h4>🚢 รอบขึ้นตู้ ${rLabel(r.k)} · ต้องเรียกเข้าจาก รง. อีก <span class="${tot?'need':'ok'}">${tot?fmt(tot)+' คู่':'ครบแล้ว ✓'}</span></h4>`;
+    if(tot) html+=`<table><tr><th style="text-align:left">สี \\ เบอร์</th>${sizes.map(z=>`<th>${z}</th>`).join('')}<th>รวม</th></tr>`+
+      cols.map(c=>{ const v=sizes.map(z=>need[c+'|'+z]||0), t=v.reduce((a,b)=>a+b,0); const ok=keys.some(k=>k.startsWith(c+'|'));
+        return `<tr><td class="c">${dot(c)}${esc(c)}</td>${v.map(x=>`<td class="${x?'need':''}">${x?fmt(x):(ok?'<span class="ok">✓</span>':'-')}</td>`).join('')}<td class="${t?'need':'ok'}">${t?fmt(t):'✓'}</td></tr>`; }).join('')+
+      `<tr class="t"><td class="c">รวม</td>${sizes.map(z=>{const x=cols.reduce((a,c)=>a+(need[c+'|'+z]||0),0);return `<td>${x?fmt(x):'-'}</td>`;}).join('')}<td class="need">${fmt(tot)}</td></tr></table>`;
+    html+=`<div style="font-size:12px;color:#6b7280;margin:-4px 0 10px">export สั่ง ${fmt(ordT)} คู่ · ในแอปแล้ว ${fmt(Object.values(have).reduce((a,b)=>a+b,0))} คู่ (แพ็คแล้ว + ยังไม่แพ็ค)</div>`; });
   if(!html) html='<div style="color:#6b7280">ยังไม่มีงานส่งออกที่ระบุรอบขึ้นตู้</div>';
-  const pop=document.getElementById('expPop'); pop.innerHTML=html+'<div style="font-size:11.5px;color:#6b7280">“ยังค้าง” = ยอดสั่ง − ใบเบิกที่เข้าแอปแล้ว (แพ็คแล้ว + ยังไม่แพ็ค) · กดปุ่มเพื่อใส่ยอด / ดาวน์โหลด Excel</div>';
-  const b=btn.getBoundingClientRect(); pop.style.left=Math.max(8,Math.min(b.left+window.scrollX, window.innerWidth-360))+'px'; pop.style.top=(b.bottom+window.scrollY+6)+'px';
+  clearTimeout(POP_T); const pop=document.getElementById('expPop'); if(POP_PIN && pop.classList.contains('on')) return;
+  pop.innerHTML='<button class="xclose" title="ปิด" onclick="hideExpPop(true)">✕</button><div class="xhint">📌 คลิกที่กล่องนี้เพื่อปักค้าง · ลากย้ายได้</div>'+html+'<div style="font-size:11.5px;color:#6b7280">หน่วย: คู่ · ✓ = ครบแล้ว · กดปุ่มเพื่อใส่ยอดสั่ง / ดาวน์โหลด Excel</div>';
+  const b=btn.getBoundingClientRect(); pop.style.left=Math.max(8,Math.min(b.left+window.scrollX, window.innerWidth-440))+'px'; pop.style.top=(b.bottom+window.scrollY+6)+'px';
   pop.classList.add('on'); }
-function hideExpPop(){ document.getElementById('expPop').classList.remove('on'); }
-function openExp(){ hideExpPop();
+let POP_T=null, POP_PIN=false;
+function hideExpPop(force){ clearTimeout(POP_T); const pop=document.getElementById('expPop');
+  if(force){ POP_PIN=false; pop.classList.remove('on','pin'); return; }
+  if(POP_PIN) return; POP_T=setTimeout(()=>{ if(!POP_PIN) pop.classList.remove('on'); },250); }
+/* คลิกที่ป้อปอัป = ปักค้างไว้ + ลากย้ายได้ · คลิกที่อื่น หรือ ✕ = ปิด */
+function popDown(e){ const pop=document.getElementById('expPop'); if(e.target.closest('.xclose')) return;
+  if(!POP_PIN){ POP_PIN=true; pop.classList.add('pin'); }
+  const sx=e.pageX, sy=e.pageY, ox=parseFloat(pop.style.left)||0, oy=parseFloat(pop.style.top)||0;
+  const mv=ev=>{ pop.style.left=(ox+ev.pageX-sx)+'px'; pop.style.top=(oy+ev.pageY-sy)+'px'; };
+  const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); };
+  document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); e.preventDefault(); }
+document.addEventListener('mousedown',e=>{ if(POP_PIN && !e.target.closest('#expPop') && !e.target.closest('#btnExp')) hideExpPop(true); });
+function openExp(){ hideExpPop(true);
   const rs=expRounds(); if(!rs.length) return toast('ไม่มีงานส่งออก ตปท. ในแอป');
   expRound.innerHTML=rs.map(r=>`<option value="${r.k}">รอบขึ้นตู้ ${rLabel(r.k)} · ${r.jobs.length} ใบ</option>`).join('')+(rs.length>1?'<option value="*">ทุกรอบรวมกัน</option>':'');
   expRound.onchange=expUpd; expUpd(); openM('mExp'); }
