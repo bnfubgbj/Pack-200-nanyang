@@ -162,6 +162,7 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .pkd{margin-top:4px;font-size:11.5px;font-weight:700;color:#1f7a3a;background:#e7f6ec;border-radius:6px;padding:2px 7px;white-space:nowrap;display:inline-block}
 .sc-ship{background:#e7f6ec;color:#1f7a3a;line-height:1.35}.sc-ship small{font-weight:600;font-size:12px;color:#2f6b45}
 .sc-cntr{background:linear-gradient(90deg,#e0f2fe,#ede9fe);color:#4338ca;border:1px solid #c7d2fe}.sc-cntr small{font-size:11.5px;font-weight:600;color:#6366f1}
+.qb.q-cntr{background:linear-gradient(90deg,#0ea5e9,#6366f1);color:#fff;min-width:150px}
 .sc-wait{background:#f1f5f9;color:#475569}.sc-pack{background:#e7f6ec;color:#1f7a3a}.sc-load{background:#fff4d6;color:#a15c00;border:1px solid #f6c560}
 .qb{font:inherit;font-weight:600;font-size:13px;border:0;border-radius:9px;padding:8px 12px;cursor:pointer;white-space:nowrap}
 .q-pack{background:var(--green);color:#fff}.q-urg{background:#fff;color:var(--amber);border:1.5px solid var(--amber)}.q-load{background:var(--navy2);color:#fff}
@@ -567,6 +568,7 @@ function demoApi(p){
   if(p.action==='setPriority'){ if(p.on){ Object.assign(j,{priority:Math.max(0,...jobs.map(x=>+x.priority||0))+1,priorityNote:p.note||'',priorityBy:u,priorityAt:nowIso()}); line=`⚡ แจ้งกลุ่มทีมแพ็ค: เร่ง ${j.custName}`; } else Object.assign(j,{priority:0,priorityNote:'',priorityBy:'',priorityAt:''}); }
   if(p.action==='setLoaded'){ if(j.status==='loaded') throw new Error('จัดรถไปแล้ว'); Object.assign(j,{status:'loaded',loadedBy:u,loadedAt:nowIso(),priority:0,carrier:p.carrier||'บริษัทส่งเอง'}); }
   if(p.action==='setCarrier'){ j.carrier=p.carrier; }
+  if(p.action==='setShipped'){ Object.assign(j,{status:'loaded',loadedBy:j.loadedBy||u,loadedAt:j.loadedAt||nowIso(),shippedAt:dayKey(new Date()),carrier:p.carrier||'',priority:0}); }
   if(p.action==='setProgress'){ Object.assign(j,{progSacks:+p.sacks||0,progBy:u,progAt:nowIso()}); }
   if(p.action==='undo'){ if(j.status==='loaded') Object.assign(j,{status:j.packedAt?'packed':'pending',loadedBy:'',loadedAt:'',shippedAt:'',carrier:''}); else if(j.status==='packed') Object.assign(j,{status:'pending',packedSacks:'',packedBoxes:'',packNote:'',packedBy:'',packedAt:''}); }
   if(p.action==='deleteJob'){ jobs = jobs.filter(x=>x.id!==p.id); }
@@ -639,7 +641,7 @@ function render(){
   L.sort((a,b)=> rank(a)-rank(b) || (rank(a)===0? a.priority-b.priority:0) || String(a.trip||99).localeCompare(String(b.trip||99),undefined,{numeric:true}) || String(a.createdAt).localeCompare(String(b.createdAt)));
   const urgRank = {}; pend.filter(j=>j.priority>0).sort((a,b)=>a.priority-b.priority).forEach((j,i)=>urgRank[j.id]=i+1);
   // ---- group: ด่วน / เที่ยว / ส่งตรง / แพ็คเสร็จ / ขึ้นรถแล้ว ----
-  const gKey = j => waitCntr(j)?'y2|🚢 ส่งออก ตปท. — แพ็คเสร็จ รอขึ้นตู้' : j.status==='loaded'?(j.shippedAt?'z2|✅ ส่งแล้ว (ยืนยันจากรายงาน)':'z1|🚚 จัดรถแล้ว — รอยืนยันส่ง') : j.status==='packed'?'y|✅ แพ็คเสร็จ — รอขึ้นรถ'
+  const gKey = j => waitCntr(j)?'y2|🚢 ส่งออก ตปท. — แพ็คเสร็จ รอขึ้นตู้' : j.status==='loaded'?(j.shippedAt?(isExp(j)?'z2|🚢 ส่งแล้ว (ขึ้นตู้ส่งออก)':'z2|✅ ส่งแล้ว (ยืนยันจากรายงาน)'):'z1|🚚 จัดรถแล้ว — รอยืนยันส่ง') : j.status==='packed'?'y|✅ แพ็คเสร็จ — รอขึ้นรถ'
     : isCvOnly(j)?'w|👟 ผ้าใบ — ไม่ต้องแพ็คกระสอบ (รอจัดรถ)' : j.priority>0?(j.source==='PDF'?'a2|⚡ งานด่วน ส่งตรง — แพ็คก่อน':'a1|⚡ งานด่วน เอเยนต์ — แพ็คก่อน') : j.trip?('b|'+String(j.trip).padStart(3,'0')+'|🚚 เอเยนต์ เที่ยว '+j.trip+' · สั่งของเข้าโกดัง') : 'x|📄 งานส่งตรง (PDF) · ลงวันที่ตามหัวบิล';
   const today=dayKey(new Date());
   const SHIPV = STATUS==='shipped';
@@ -737,7 +739,7 @@ function jobCard(j, urgNo){
       ? (isBig(j)?`<button class="qb q-prog" onclick="event.stopPropagation();openProg('${id}')">📈 คืบหน้า</button>`:'')+`<button class="qb q-pack" onclick="event.stopPropagation();openPack('${id}')">✅ แพ็คเสร็จ</button>`
       : stChip('⏳ รอแพ็ค','sc-wait'));
   } else if(waitCntr(j)){
-    quick = `<span class="stchip sc-cntr">🚢 แพ็คเสร็จ · รอขึ้นตู้<small>ยืนยันส่งจากรายงานตอนเย็น</small></span>`;
+    quick = canPack() ? `<button class="qb q-cntr" onclick="event.stopPropagation();cntrDone('${id}')">🚢 ขึ้นตู้แล้ว</button>` : `<span class="stchip sc-cntr">🚢 แพ็คเสร็จ · รอขึ้นตู้<small>ป้องกดเมื่อขึ้นตู้แล้ว</small></span>`;
     if(canPack() && j.status==='packed') acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “แพ็คเสร็จ” กลับเป็นรอแพ็ค?')">↩ ยกเลิกแพ็คเสร็จ</button>`;
     if(canLoad() && j.status==='loaded') acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ย้อนกลับเป็นแพ็คเสร็จ?')">↩ ย้อนเป็นแพ็คเสร็จ</button>`;
   } else if(j.status==='packed'){
@@ -863,6 +865,10 @@ function openShip(ids, mode){
   shOk.textContent = SHIP_MODE==='edit' ? 'บันทึก' : 'ยืนยันส่งแล้ว';
   drawCarriers(); openM('mShip');
 }
+function cntrDone(id){ const j=JOBS.find(x=>x.id===id); if(!j) return;
+  if(!confirm(`ยืนยันว่า “${j.custName}” ${fmt(+j.packedSacks||0)} กส. ขึ้นตู้แล้ววันนี้?`)) return;
+  const d=dayKey(new Date());
+  quick(id, x=>Object.assign(x,{status:'loaded',loadedBy:USER?USER.name:'-',loadedAt:x.loadedAt||nowIso(),shippedAt:d,carrier:'ขึ้นตู้ส่งออก',priority:0}), {action:'setShipped',id,carrier:'ขึ้นตู้ส่งออก'}, '🚢 บันทึกขึ้นตู้แล้ว'); }
 function loadOne(id){ quick(id, j=>Object.assign(j,{status:'loaded',loadedBy:USER?USER.name:'-',loadedAt:nowIso(),priority:0}), {action:'setLoaded',id,carrier:''}, '🚚 จัดรถแล้ว — รอยืนยันด้วยรายงานตอนเย็น'); }
 function loadAll(ids){ ids=ids.split(','); if(!confirm(`ยืนยันจัดรถแล้วทั้ง ${ids.length} งาน?`)) return;
   for(const id of ids) quick(id, j=>Object.assign(j,{status:'loaded',loadedBy:USER?USER.name:'-',loadedAt:nowIso(),priority:0}), {action:'setLoaded',id,carrier:''}, `🚚 จัดรถแล้ว ${ids.length} งาน`); }
