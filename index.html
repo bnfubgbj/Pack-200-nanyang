@@ -371,7 +371,7 @@ table.rep select{font:inherit;font-size:12.5px;max-width:340px;margin-top:3px}
   <h3>🚢 Excel งานส่งออก ตปท.</h3><div class="sub">รวมทุกใบของรอบที่เลือก ทั้งแพ็คแล้วและยังไม่แพ็ค แยกสี × เบอร์</div>
   <label>รอบขึ้นตู้</label><select id="expRound"></select>
   <div class="rndset" style="margin-top:8px;display:flex;flex-wrap:wrap">📅 เลื่อนรอบนี้ทั้งรอบไปวันที่ <input type="date" id="expMove"><button class="btn btn-ghost" onclick="moveRound()">เลื่อนรอบ</button><small style="font-weight:400;color:#6366f1">ยอดสั่งที่ใส่ไว้ย้ายตามไปด้วย</small></div>
-  <div class="ocrz" id="ocrZ" onclick="ocrFile.click()">📸 <b>วางภาพการ์ด Teams ของฝ่าย export</b> (แคปหน้าจอแล้วกด <b>Ctrl+V</b> ที่นี่ / ลากภาพมาวาง / แตะเลือกภาพ)<br><small>แอปอ่านตัวเลขสี × เบอร์ให้เอง — ตรวจทานกับการ์ดอีกครั้งก่อนดาวน์โหลด</small>
+  <div class="ocrz" id="ocrZ" onclick="ocrFile.click()">📸 <b>วางภาพการ์ด Teams ของฝ่าย export</b> (แคปหน้าจอแล้วกด <b>Ctrl+V</b> ที่นี่ / ลากภาพมาวาง / แตะเลือกภาพ)<br><small>การ์ดยอดสั่ง → อ่านสี × เบอร์ให้เอง · การ์ด “ปรับเลื่อนวันส่งมอบ” → เลื่อนรอบให้เอง</small>
     <input type="file" id="ocrFile" accept="image/*" style="display:none" onchange="ocrImage(this.files[0]);this.value=''"></div>
   <label>ยอดสั่ง export รอบนี้ (หน่วย <b>โหล</b> ตามการ์ด Teams) — อ่านจากภาพ หรือพิมพ์แก้ได้</label>
   <div class="ogw" id="ogBox"></div>
@@ -832,7 +832,9 @@ function parseOrderText(text){
     sizes.forEach((z,i)=>{ const others=rows.filter(r=>r.col!==bc).reduce((a,r)=>a+(r.vals[i]||0),0); const v=colTot[i]-others; if(v>0) out[bc+'|'+z]=v; else delete out[bc+'|'+z]; });
     const row=rows.find(r=>r.col===bc); const rs=sizes.reduce((a,z)=>a+(out[bc+'|'+z]||0),0); if(!row||rs===row.total) bad=[]; }
   const sum=Object.values(out).reduce((a,b)=>a+b,0);
-  return {out,date,bad,grand,sum,rows};
+  const dates=[]; const re=/(\d{1,2})\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*(\d{2,4})/ig; let mm;
+  while((mm=re.exec(text))){ let y=+mm[3]; if(y<100) y+=2000; if(y>2400) y-=543; dates.push(`${y}-${String(OCR_MON[mm[2].toLowerCase()]).padStart(2,'0')}-${mm[1].padStart(2,'0')}`); }
+  return {out,date,bad,grand,sum,rows,dates};
 }
 async function ocrImage(file){
   if(!file||!/^image\//.test(file.type)) return toast('⚠ ต้องเป็นไฟล์ภาพ');
@@ -847,7 +849,12 @@ async function ocrImage(file){
       if(!p || good || (q.bad.length<p.bad.length && Object.keys(q.out).length)) p=q;
       if(good) break; }
     await w.terminate();
-    if(!Object.keys(p.out).length) throw new Error('อ่านตาราง สี × เบอร์ ไม่พบ — ลองแคปให้เห็นตารางชัด ๆ');
+    if(!Object.keys(p.out).length){
+      // การ์ด "ปรับเลื่อนวันส่งมอบ จาก 24 Nov 2026 เป็น 27 Nov 2026"
+      if(p.dates && p.dates.length>=2 && p.dates[0]!==p.dates[1]){ const [from,to]=p.dates;
+        if(!expRounds().some(r=>r.k===from)) throw new Error(`อ่านได้ว่าเลื่อน ${rLabel(from)} → ${rLabel(to)} แต่ในแอปไม่มีรอบ ${rLabel(from)}`);
+        expRound.value=from; expMove.value=to; expUpd(); await moveRound(); return; }
+      throw new Error('อ่านตาราง สี × เบอร์ ไม่พบ — ลองแคปให้เห็นตารางชัด ๆ'); }
     if(p.date){ const opt=[...expRound.options].find(o=>o.value===p.date); if(opt) expRound.value=p.date; else toast(`⚠ ในแอปยังไม่มีรอบขึ้นตู้ ${rLabel(p.date)} — บันทึกเข้ารอบที่เลือกอยู่`,4500); }
     LS.set(ordKey(),p.out); expUpd();
     const okSum = p.grand ? p.sum===p.grand : true;
