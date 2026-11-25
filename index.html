@@ -555,6 +555,8 @@ const LOADERS=['ชัย','ต่อ'];           // กด 🚚 จัดร�
 const DELETERS=['ต่อ','สุกี้','ฟ้า'];    // ลบงาน (คนนำเข้าไฟล์)
 const canPack=()=>!!USER&&PACKERS.includes(USER.name);
 const canLoad=()=>!!USER&&LOADERS.includes(USER.name);
+const DATE_EDITORS=['ต่อ','ป้อง'];  // เลื่อนวันนัดส่ง / รอบขึ้นตู้
+const canDate=()=>!!USER&&DATE_EDITORS.includes(USER.name);
 const canDel =()=>!!USER&&DELETERS.includes(USER.name);
 const stChip=(t,c)=>`<span class="stchip ${c}">${t}</span>`;
 function canUrg(){ if(!USER) return false; return typeof USER.canUrgent==='boolean' ? USER.canUrgent : URGENT_DEFAULT.includes(USER.name); }
@@ -607,6 +609,7 @@ function demoApi(p){
   if(p.action==='setLoaded'){ if(j.status==='loaded') throw new Error('จัดรถไปแล้ว'); Object.assign(j,{status:'loaded',loadedBy:u,loadedAt:nowIso(),priority:0,carrier:p.carrier||'บริษัทส่งเอง'}); }
   if(p.action==='setCarrier'){ j.carrier=p.carrier; }
   if(p.action==='setShipped'){ Object.assign(j,{status:'loaded',loadedBy:j.loadedBy||u,loadedAt:j.loadedAt||nowIso(),shippedAt:dayKey(new Date()),carrier:p.carrier||'',priority:0}); }
+  if(p.action==='setDue'){ j.dueDate=p.due||''; }
   if(p.action==='setRound'){ j.cntrRound=p.round||''; }
   if(p.action==='setProgress'){ Object.assign(j,{progSacks:+p.sacks||0,progBy:u,progAt:nowIso()}); }
   if(p.action==='undo'){ if(j.status==='loaded') Object.assign(j,{status:j.packedAt?'packed':'pending',loadedBy:'',loadedAt:'',shippedAt:'',carrier:''}); else if(j.status==='packed') Object.assign(j,{status:'pending',packedSacks:'',packedBoxes:'',packNote:'',packedBy:'',packedAt:''}); }
@@ -654,7 +657,9 @@ function destSummary(L,qRaw){
   const rows=Object.keys(by).sort().map(k=>{ const g=by[k]; let pk=0,pd=0,sh=0; g.forEach(j=>{ if(isSh(j)) sh+=sk(j); else if(isPk(j)) pk+=sk(j); else pd+=sk(j); });
     const late = k!=='-' && k<t0 && pd>0;
     const lbl = k==='-' ? 'ไม่ระบุวันส่ง' : (()=>{ const [y,m,d]=k.split('-'); return `${TH_D[new Date(+y,+m-1,+d).getDay()]} ${+d}/${+m}/${String(+y+543).slice(2)}`+(k===t0?' (วันนี้)':''); })();
-    return `<tr class="${late?'late':''}"><td class="c">📆 ${lbl}${late?' ⚠':''}</td><td>${g.length}</td><td class="ok">${pk?fmt(pk):'-'}</td><td class="pd">${pd?fmt(pd):'-'}</td><td>${sh?fmt(sh):'-'}</td><td><b>${fmt(pk+pd+sh)}</b></td></tr>`; }).join('');
+    const ids=g.filter(j=>!j.shippedAt).map(j=>j.id);
+    const mv = canDate() && ids.length ? ` <button class="lnk" onclick="moveDueGroup('${ids.map(esc).join(',')}','${k}')">✏️ เลื่อน</button>` : '';
+    return `<tr class="${late?'late':''}"><td class="c">📆 ${lbl}${late?' ⚠':''}${mv}</td><td>${g.length}</td><td class="ok">${pk?fmt(pk):'-'}</td><td class="pd">${pd?fmt(pd):'-'}</td><td>${sh?fmt(sh):'-'}</td><td><b>${fmt(pk+pd+sh)}</b></td></tr>`; }).join('');
   return `<div class="dsum"><div class="dh">📍 สรุป “${esc(qRaw)}” · ${tot.n} งาน
       <span class="pill ok">✅ แพ็คแล้ว ${fmt(tot.pk)} กส. (${tot.pkN} งาน)</span><span class="pill pd">⏳ รอแพ็ค ${fmt(tot.pd)} กส. (${tot.pdN} งาน)</span>${tot.sh?`<span class="pill">🚚 ส่งแล้ว ${fmt(tot.sh)} กส.</span>`:''}</div>
     <table><tr><th style="text-align:left">นัดส่ง</th><th>งาน</th><th>แพ็คแล้ว (กส.)</th><th>รอแพ็ค (กส.)</th><th>ส่งแล้ว (กส.)</th><th>รวม</th></tr>${rows}</table>
@@ -742,6 +747,7 @@ function dayLabel(k){ if(k==='0000-00-00') return 'ไม่ทราบวั�
   return `${TH_D[d.getDay()]} ${dd} ${TH_M[m-1]} ${String(y+543).slice(2)}` + (k===t?' (วันนี้)':k===yd?' (เมื่อวาน)':k===dayKey(new Date(Date.now()+864e5))?' (พรุ่งนี้)':''); }
 /* กำหนดส่ง จากใบเอเยนต์ เช่น "ส่ง 30/11/69" (อยู่ในช่องชื่อกระสอบ/หมายเหตุ) */
 function dueOf(j){
+  if(j.dueDate){ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(j.dueDate)); if(m) return new Date(+m[1],+m[2]-1,+m[3]); }   // ป้อง/ต่อ เลื่อนวันนัดส่งเอง
   const t=[j.sackName,j.note].filter(Boolean).join(' • ');
   const m=/ส่ง(?:วันที่)?\s*(\d{1,2})\s*[\/\-\.]\s*(\d{1,2})(?:\s*[\/\-\.]\s*(\d{2,4}))?/.exec(t); if(!m) return null;
   return mkDate_(m);
@@ -804,6 +810,12 @@ function popDown(e){ const pop=document.getElementById('expPop'); if(e.target.cl
   const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); };
   document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); e.preventDefault(); }
 document.addEventListener('mousedown',e=>{ if(POP_PIN && !e.target.closest('#expPop') && !e.target.closest('#btnExp')) hideExpPop(true); });
+function setDue(id,d){ if(d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) return toast('เลือกวันที่ก่อน');
+  quick(id, j=>{ j.dueDate=d; }, {action:'setDue',id,due:d}, d?`📆 เลื่อนวันนัดส่งเป็น ${rLabel(d)} แล้ว`:'↩ ใช้วันนัดส่งตามใบยาว'); }
+/* เลื่อนทั้งกลุ่ม (จากกล่องสรุปตามผู้รับ) */
+function moveDueGroup(ids,from){ ids=ids.split(','); const to=prompt(`เลื่อนวันนัดส่ง ${ids.length} งาน จาก ${from==='-'?'ไม่ระบุ':rLabel(from)} เป็นวันที่ (พิมพ์ วว/ดด/ปป เช่น 28/11/69)`); if(!to) return;
+  const m=/^(\d{1,2})[\/\-\.](\d{1,2})(?:[\/\-\.](\d{2,4}))?$/.exec(to.trim()); const d=m&&mkDate_(m); if(!d) return toast('รูปแบบวันที่ไม่ถูกต้อง');
+  const k=dayKey(d); ids.forEach(id=>{ const j=JOBS.find(x=>x.id===id); if(!j) return; if(isExp(j)) quick(id,x=>{x.cntrRound=k;},{action:'setRound',id,round:k},`📆 เลื่อนเป็น ${rLabel(k)} แล้ว ${ids.length} งาน`); else quick(id,x=>{x.dueDate=k;},{action:'setDue',id,due:k},`📆 เลื่อนเป็น ${rLabel(k)} แล้ว ${ids.length} งาน`); }); }
 function setRound(id,d){ if(d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) return toast('เลือกวันที่ก่อน');
   quick(id, j=>{ j.cntrRound=d; }, {action:'setRound',id,round:d}, d?`🚢 ย้ายเข้ารอบขึ้นตู้ ${rLabel(d)} แล้ว`:'↩ ใช้รอบตามใบยาว'); }
 async function moveRound(){ const from=expRound.value, to=expMove.value;
@@ -1070,8 +1082,10 @@ function jobCard(j, urgNo){
     quick = j.shippedAt ? `<span class="stchip sc-ship" title="${esc(j.carrier||'')}">✅ ส่งแล้ว ${shipD(j.shippedAt)}${j.carrier?`<small>🚚 ${esc(String(j.carrier).split('\n')[0])}</small>`:''}</span>` : `<span class="stchip sc-load">🚚 จัดรถแล้ว · รอยืนยันส่ง${j.loadedAt?`<small style="font-size:12px;font-weight:600">จัดรถ ${tShort(j.loadedAt)}</small>`:''}</span>`;
     if(canLoad()) acts+=`<button class="btn btn-ghost" onclick="act('undo','${id}','ยกเลิก “จัดรถแล้ว” กลับเป็นแพ็คเสร็จ?')">↩ ยกเลิกจัดรถ</button>`;
   }
-  if(USER && EXPORT_VIEWERS.includes(USER.name) && (isExp(j) || j.source==='EXCEL') && !j.shippedAt)
-    acts+=`<span class="rndset">🚢 รอบขึ้นตู้ <input type="date" id="rd_${id}" value="${roundKey(j)}"><button class="btn btn-ghost" onclick="setRound('${id}',document.getElementById('rd_${id}').value)">บันทึก</button>${j.cntrRound?`<button class="lnk" onclick="setRound('${id}','')">ใช้ตามใบยาว</button>`:''}</span>`;
+  if(canDate() && !j.shippedAt){
+    if(isExp(j)) acts+=`<span class="rndset">🚢 รอบขึ้นตู้ <input type="date" id="rd_${id}" value="${roundKey(j)}"><button class="btn btn-ghost" onclick="setRound('${id}',document.getElementById('rd_${id}').value)">บันทึก</button>${j.cntrRound?`<button class="lnk" onclick="setRound('${id}','')">ใช้ตามใบยาว</button>`:''}</span>`;
+    else acts+=`<span class="rndset">📆 วันนัดส่ง <input type="date" id="dd_${id}" value="${dueOf(j)?dayKey(dueOf(j)):''}"><button class="btn btn-ghost" onclick="setDue('${id}',document.getElementById('dd_${id}').value)">บันทึก</button>${j.dueDate?`<button class="lnk" onclick="setDue('${id}','')">ใช้ตามใบยาว</button>`:''}${EXPORT_VIEWERS.includes(USER.name)&&j.source==='EXCEL'?`<button class="lnk" onclick="setRound('${id}',document.getElementById('dd_${id}').value)" title="ย้ายใบนี้เป็นงานส่งออก รอบขึ้นตู้ตามวันที่เลือก">→ เป็นรอบขึ้นตู้</button>`:''}</span>`;
+  }
   if(canDel()) acts+=`<button class="btn btn-del" onclick="act('deleteJob','${id}','ลบงานนี้ออกจากระบบ?')">🗑 ลบงาน</button>`;
   const meta=[ j.createdAt?`นำเข้า ${tShort(j.createdAt)} โดย ${esc(j.createdBy)}`:'',
     j.packedAt?`แพ็คเสร็จ ${tShort(j.packedAt)} โดย ${esc(j.packedBy)}`:'', j.loadedAt?`จัดรถ ${tShort(j.loadedAt)} โดย ${esc(j.loadedBy)}`:'', j.shippedAt?`<b style="color:var(--green)">✅ ส่งแล้ว ${esc(dayLabel(String(j.shippedAt).slice(0,10)))}${j.carrier?' · 🚚 '+esc(j.carrier):''}${j.shipDoc?' · '+esc(j.shipDoc):''}</b>`:''].filter(Boolean).join(' · ');
