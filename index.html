@@ -171,6 +171,13 @@ main{max-width:1200px;margin:auto;padding:14px 12px 80px}
 .xpop table{border-collapse:collapse;width:100%;margin-bottom:8px}.xpop th,.xpop td{border-bottom:1px solid #eef0f4;padding:3px 6px;text-align:right}.xpop th{color:#6b7280;font-weight:600;font-size:12px}
 .xpop td.c{text-align:left;font-weight:600}.xpop .need{color:#b91c1c;font-weight:700}.xpop .ok{color:#15803d;font-weight:700}.xpop tr.t td{font-weight:700;border-top:2px solid #e5e7eb}
 .rndset{display:inline-flex;gap:6px;align-items:center;background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:4px 8px;font-size:13px;font-weight:600;color:#3730a3}.rndset input{font:inherit;padding:5px;border:1px solid #c7d2fe;border-radius:6px}.rndset .btn{padding:6px 10px;font-size:13px}
+.dsum{background:#fff;border:2px solid #c7d2fe;border-radius:12px;padding:10px 12px;margin-bottom:10px}
+.dsum .dh{font-weight:700;color:#3730a3;display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px}
+.dsum .pill{font-size:12.5px;font-weight:700;border-radius:999px;padding:3px 10px;background:#f1f5f9;color:#334155}
+.dsum .pill.ok{background:#e7f6ec;color:#15803d}.dsum .pill.pd{background:#fff4e0;color:#b45309}
+.dsum table{border-collapse:collapse;width:100%;font-size:13.5px}.dsum th,.dsum td{border-bottom:1px solid #eef0f4;padding:5px 8px;text-align:right}
+.dsum th{color:#6b7280;font-size:12.5px}.dsum td.c{text-align:left;font-weight:600}.dsum td.ok{color:#15803d;font-weight:700}.dsum td.pd{color:#b45309;font-weight:700}
+.dsum tr.late td{background:#fdecec}.dsum .dn{font-size:11.5px;color:#6b7280;margin-top:6px}
 .ocrz{border:2px dashed #a5b4fc;background:#eef2ff;border-radius:12px;padding:12px;text-align:center;cursor:pointer;margin-top:12px;font-size:13.5px;color:#3730a3}.ocrz small{color:#6366f1}.ocrz.busy{opacity:.7;cursor:wait}
 .ogw{overflow-x:auto}.ogw table{border-collapse:collapse;font-size:13px;width:100%}
 .ogw th,.ogw td{border:1px solid var(--line);padding:3px 4px;text-align:center}.ogw th{background:#f3f4f6;font-weight:600}
@@ -291,7 +298,7 @@ table.rep select{font:inherit;font-size:12.5px;max-width:340px;margin-top:3px}
       <button class="chip" id="btnAll" onclick="toggleAll()">กางทั้งหมด</button>
       <button class="chip" id="btnExp" style="display:none;background:linear-gradient(90deg,#0ea5e9,#6366f1);color:#fff;border:0" onclick="openExp()" onmouseenter="showExpPop(this)" onmouseleave="hideExpPop()">⬇ Excel ส่งออก ตปท.</button>
       <div id="expPop" class="xpop" onmouseenter="clearTimeout(POP_T)" onmouseleave="hideExpPop()" onmousedown="popDown(event)"></div>
-      <input id="fQ" placeholder="🔍 ค้นหา ลูกค้า / SO / IFO / ชื่อกระสอบ" oninput="render()">
+      <input id="fQ" placeholder="🔍 ค้นหา ลูกค้า / SO / IFO / ชื่อกระสอบ / ผู้รับ เช่น ทีทีทีซี → สรุปให้" oninput="render()">
     </div>
     <div class="list" id="list"></div>
   </section>
@@ -631,6 +638,28 @@ function normJob(j){
 function isToday(s){ if(!s) return false; const d=new Date(s), n=new Date(); return d.toDateString()===n.toDateString(); }
 function setStatus(s){ STATUS = s; render(); }
 
+/* ค้นหาชื่อผู้รับ/ปลายทาง — ชื่อไทย/อังกฤษเป็นคำเดียวกัน (เพิ่มได้) */
+const DEST_ALIAS=[['tttc','ทีทีทีซี','ttc','ที.ที.ที.ซี']];
+function qTerms(q){ q=q.toLowerCase().replace(/\s+/g,' ').trim(); const g=DEST_ALIAS.find(a=>a.some(x=>x.toLowerCase()===q)); return g?g.map(x=>x.toLowerCase()):[q]; }
+function qMatch(j,q){ const hay=[j.custName,j.custCode,j.docNo,j.ref,j.sackName,j.note,j.transport].join(' ').toLowerCase(); return qTerms(q).some(t=>hay.includes(t)); }
+/* สรุปตามคำค้น: แพ็คแล้ว / รอแพ็ค (กส.) แยกตามวันนัดส่ง */
+function destSummary(L,qRaw){
+  const p=d=>String(d).padStart(2,'0');
+  const by={}; L.forEach(j=>{ const d=dueOf(j)||cntrOf(j); const k=d?dayKey(d):'-'; (by[k]=by[k]||[]).push(j); });
+  const sk=j=> j.status==='pending' ? (isCvOnly(j)?0:estOf(j)) : (+j.packedSacks||0);
+  const isPk=j=>j.status!=='pending', isSh=j=>!!j.shippedAt;
+  const tot={n:L.length, pk:0, pd:0, sh:0, pkN:0, pdN:0};
+  L.forEach(j=>{ if(isSh(j)){tot.sh+=sk(j);} else if(isPk(j)){tot.pk+=sk(j);tot.pkN++;} else {tot.pd+=sk(j);tot.pdN++;} });
+  const t0=dayKey(new Date());
+  const rows=Object.keys(by).sort().map(k=>{ const g=by[k]; let pk=0,pd=0,sh=0; g.forEach(j=>{ if(isSh(j)) sh+=sk(j); else if(isPk(j)) pk+=sk(j); else pd+=sk(j); });
+    const late = k!=='-' && k<t0 && pd>0;
+    const lbl = k==='-' ? 'ไม่ระบุวันส่ง' : (()=>{ const [y,m,d]=k.split('-'); return `${TH_D[new Date(+y,+m-1,+d).getDay()]} ${+d}/${+m}/${String(+y+543).slice(2)}`+(k===t0?' (วันนี้)':''); })();
+    return `<tr class="${late?'late':''}"><td class="c">📆 ${lbl}${late?' ⚠':''}</td><td>${g.length}</td><td class="ok">${pk?fmt(pk):'-'}</td><td class="pd">${pd?fmt(pd):'-'}</td><td>${sh?fmt(sh):'-'}</td><td><b>${fmt(pk+pd+sh)}</b></td></tr>`; }).join('');
+  return `<div class="dsum"><div class="dh">📍 สรุป “${esc(qRaw)}” · ${tot.n} งาน
+      <span class="pill ok">✅ แพ็คแล้ว ${fmt(tot.pk)} กส. (${tot.pkN} งาน)</span><span class="pill pd">⏳ รอแพ็ค ${fmt(tot.pd)} กส. (${tot.pdN} งาน)</span>${tot.sh?`<span class="pill">🚚 ส่งแล้ว ${fmt(tot.sh)} กส.</span>`:''}</div>
+    <table><tr><th style="text-align:left">นัดส่ง</th><th>งาน</th><th>แพ็คแล้ว (กส.)</th><th>รอแพ็ค (กส.)</th><th>ส่งแล้ว (กส.)</th><th>รวม</th></tr>${rows}</table>
+    <div class="dn">รอแพ็ค = ประมาณจากโหล ÷ โหล/กส. · แพ็คแล้ว = ตัวเลขที่ทีมแพ็คกรอก · กด “✅ ส่งแล้ว” ด้านบนเพื่อดูที่ส่งไปแล้ว</div></div>`;
+}
 function setSrc(v){ fSrc.value=v; try{localStorage.setItem('pk_src',v);}catch(e){} render(); }
 try{ const _s=localStorage.getItem('pk_src'); if(_s) document.getElementById('fSrc').value=_s; }catch(e){}
 function render(){
@@ -666,7 +695,7 @@ function render(){
     if(trip && String(j.trip)!==trip) return false;
     if(dayF && jobDay(j)!==dayF) return false;
     if(dv==='impToday' && dayKey(j.createdAt)!==dayKey(new Date())) return false;
-    if(q && ![j.custName,j.custCode,j.docNo,j.ref,j.sackName,j.note,j.transport].join(' ').toLowerCase().includes(q)) return false;
+    if(q && !qMatch(j,q)) return false;
     return true;
   });
   const rank = j => j.status==='pending'?(isCvOnly(j)?2:(j.priority>0?0:1)):(j.status==='packed'?2:3);
@@ -692,8 +721,8 @@ function render(){
       return `<div class="grp"><span>${esc(label)}</span><span class="gs">${gsum} ${bulk}</span></div>`+g.map(j=>jobCard(j,urgRank[j.id])).join('');
     }).join('');
   }).join('');
-  document.getElementById('list').innerHTML = L.length ? html :
-    `<div class="empty">ไม่มีงานในมุมมองนี้${JOBS.length?'':'<br><br>เริ่มจากแท็บ “📥 นำเข้าไฟล์”'}</div>`;
+  document.getElementById('list').innerHTML = (q && L.length ? destSummary(L,fQ.value.trim()) : '') + (L.length ? html :
+    `<div class="empty">ไม่มีงานในมุมมองนี้${JOBS.length?'':'<br><br>เริ่มจากแท็บ “📥 นำเข้าไฟล์”'}</div>`);
 }
 const TH_D=['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'], TH_M=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 function dayKey(x){ if(!x) return ''; const d=x instanceof Date?x:new Date(x); if(isNaN(d)) return ''; const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
